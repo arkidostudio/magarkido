@@ -195,6 +195,16 @@ function initPatterns() {
   loadedFiles = window.magarkidoFiles || [];
   edClrs = normalizeClrs(window.magarkidoClrs || {});
   if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+
+  // Restore previous selection from Ruby @nm = [[cat,key],...]
+  var nm = window.magarkidoNm;
+  if (Array.isArray(nm) && nm.length) {
+    selKeys = nm.map(function(p){ return {category:p[0], pattern:p[1]}; });
+    // Pick the right view: single cat → that category, mixed → All
+    var uniq = selKeys.map(function(s){return s.category;}).filter(function(c,i,a){return a.indexOf(c)===i;});
+    selCatName = (uniq.length === 1 && patterns[uniq[0]]) ? uniq[0] : null;
+  }
+
   renderFiles();
   renderNav();
   renderGrid();

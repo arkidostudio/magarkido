@@ -522,10 +522,9 @@ module MagArkido
 
       @mgr.add_action_callback('closeDialog') do |_ctx|
         @mgr.close
-        @nm = 0
       end
 
-      @mgr.set_on_closed { @nm = 0 }
+      @mgr.set_on_closed { }
       @mgr
     end
 
@@ -557,6 +556,7 @@ module MagArkido
             window.magarkidoPatternsDir = #{JSON.generate(PATTERNS_DIR)};
             window.magarkidoFiles = #{JSON.generate(files_js)};
             window.magarkidoClrs = #{JSON.generate(@clrs)};
+            window.magarkidoNm   = #{JSON.generate(@nm)};
           </script>
         </head>
         #{body}
