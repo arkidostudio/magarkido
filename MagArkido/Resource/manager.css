@@ -273,6 +273,30 @@ html, body {
 }
 .mgr-rot-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+#mgr-preview-actions {
+  display: flex;
+  gap: 4px;
+  padding: 5px 6px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+.mgr-action-btn {
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  transition: border-color .1s, color .1s, background .1s;
+}
+.mgr-action-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--sel-bg); }
+
 /* ── Selection summary + apply ───────────────────────── */
 #selsum {
   display: flex;

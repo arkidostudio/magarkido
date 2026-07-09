@@ -14,7 +14,7 @@
     <span id="logo">MAGARKIDO</span>
     <span id="tsub">v0.5.0</span>
     <button class="hbtn" onclick="su('importMgzSession')" title="Load a .mgz file into this session">&#128194; Load .mgz</button>
-    <button class="hbtn files-only-btn" onclick="newPattern()" title="New pattern">&#43; New</button>
+    <button class="hbtn" onclick="newPattern()" title="New pattern">&#43; New</button>
     <button class="hbtn files-only-btn" id="edit-ptn-btn" onclick="openEditor()" title="Edit selected pattern" disabled>&#9998; Edit Pattern</button>
     <button class="hbtn danger-btn files-only-btn" onclick="deleteSel()" title="Delete selected objects from model">&#128465; Delete</button>
   </header>
@@ -51,11 +51,15 @@
         <div id="mgr-preview-top">
           <div id="mgr-preview-label"></div>
           <div id="mgr-rot-btns">
-            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+3)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate left">&#9664;</button>
-            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+1)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate right">&#9654;</button>
+            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+3)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate left">↺</button>
+            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+1)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate right">↻</button>
           </div>
         </div>
         <canvas id="mgr-canvas"></canvas>
+        <div id="mgr-preview-actions">
+          <button class="mgr-action-btn" onclick="su('transformAll')" title="Transform All — apply confirmed pattern to selection">&#9654; Transform</button>
+          <button class="mgr-action-btn" onclick="su('randomizeRotation')" title="Randomize Rotation — rotate selected objects randomly">↻ Rotate</button>
+        </div>
       </div>
     </div>
   </div>
@@ -95,8 +99,8 @@
       <canvas id="iso-canvas"></canvas>
       <div id="canvas-ctrl">
         <div id="canvas-ctrl-row">
-          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">&#9664;</button>
-          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">&#9654;</button>
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">↺</button>
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">↻</button>
           <button class="rand-btn" onclick="randomize()">&#127922; Rnd</button>
           <button class="rand-btn" onclick="drawISO()" title="Redraw canvas">&#8635;</button>
           <button class="rand-btn test-btn" id="test-btn" onclick="testPattern()">&#9654; Test</button>
@@ -321,7 +325,11 @@ function updateEditBtn() {
 
 function setShellState(hasFiles) {
   var shell = document.getElementById('shell');
+  var wasNoFiles = shell.classList.contains('no-files');
   shell.classList.toggle('no-files', !hasFiles);
+  if (wasNoFiles !== !hasFiles) {
+    su('resizeDialog', JSON.stringify(hasFiles ? {w:680,h:580} : {w:440,h:165}));
+  }
 }
 
 function renderCard(g, cat, key) {

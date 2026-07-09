@@ -525,6 +525,19 @@ module MagArkido
         UI.start_timer(0, false) { absorb_to_editor }
       end
 
+      @mgr.add_action_callback('transformAll') do |_ctx|
+        transform_all(1)
+      end
+
+      @mgr.add_action_callback('randomizeRotation') do |_ctx|
+        rotate_all
+      end
+
+      @mgr.add_action_callback('resizeDialog') do |_ctx, data|
+        d = JSON.parse(data)
+        @mgr.set_size(d['w'].to_i, d['h'].to_i) rescue nil
+      end
+
       @mgr.add_action_callback('closeDialog') do |_ctx|
         @mgr.close
         @nm = 0
