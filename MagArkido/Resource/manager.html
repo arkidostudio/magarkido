@@ -315,8 +315,8 @@ function selCat(btn) {
 function updateEditBtn() {
   var btn = document.getElementById('edit-ptn-btn');
   if (!btn) return;
-  var canEdit = selCatName !== null && selCatName !== 'auto' && Object.keys(patterns[selCatName] || {}).length > 0;
-  btn.disabled = !canEdit;
+  var hasAny = Object.keys(patterns).some(function(c){ return Object.keys(patterns[c]||{}).length > 0; });
+  btn.disabled = selCatName === 'auto' || !hasAny;
 }
 
 function setShellState(hasFiles) {
@@ -798,7 +798,7 @@ function receiveAbsorb(blocks, entityName) {
 
 function openEditor() {
   var firstCat=Object.keys(patterns)[0]||'';
-  var src=null, sname='', scat=selCatName==='auto'?firstCat:selCatName;
+  var src=null, sname='', scat=(selCatName==='auto'||selCatName===null)?firstCat:selCatName;
   if (selKeys.length) {
     var last=selKeys[selKeys.length-1];
     src=(patterns[last.category]||{})[last.pattern];
