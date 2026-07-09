@@ -43,14 +43,16 @@ module MagArkido
       require 'json'
       @mdl = Sketchup.active_model
       @mts = @mdl.materials
-      @nm        = 0     # 0 = auto-choose; [[cat,key], ...] = specific patterns
+      @nm        = 0
       @no_detail = false
       @cb        = DEFAULT_BLOCK
-      @files     = []    # [{name:, path:, clrs:, ptns:}]
-      @ptn       = {}
-      @clrs      = {}
-      # No auto-scan of PATTERNS_DIR — manager starts empty each session.
-      # Users load .mgz files explicitly via Load .mgz in the manager.
+      # Preserve loaded data across reloads (rel) within the same SketchUp session.
+      # Only reset on true first load (when @files hasn't been set yet).
+      unless @files
+        @files = []
+        @ptn   = {}
+        @clrs  = {}
+      end
     end
 
     initial
@@ -60,14 +62,18 @@ module MagArkido
     # ---------------------------------------------------------------------------
     FIELD_INDICES = { 'x'=>0,'y'=>1,'z'=>2,'w'=>3,'d'=>4,'h'=>5,'seg'=>9,'offset'=>10 }.freeze
 
-    def self.resolve(expr, t, r1, r2, r3, block_fields = nil)
+    def self.resolve(expr, t, r1, r2, r3, block_fields = nil, r4 = 0, r5 = 0, r6 = 0)
       return expr unless expr.is_a?(String)
 
       s = expr.dup
       s.gsub!('r1', r1.to_s)
       s.gsub!('r2', r2.to_s)
       s.gsub!('r3', r3.to_s)
+      s.gsub!('r4', r4.to_s)
+      s.gsub!('r5', r5.to_s)
+      s.gsub!('r6', r6.to_s)
       s.gsub!(/lv\(t,([\d.]+)\)/) { lv(t, $1.to_f).to_s }
+      s.gsub!(/rand\((\d+)\)/) { rand($1.to_i).to_s }
       if block_fields
         FIELD_INDICES.each do |name, idx|
           v = block_fields[idx]
@@ -166,18 +172,18 @@ module MagArkido
         end
       end
 
-      r1, r2, r3 = rand(2), rand(2), rand(2)
+      r1, r2, r3, r4, r5, r6 = rand(2), rand(2), rand(2), rand(2), rand(2), rand(2)
 
       blocks = pattern_data.map { |b| normalise_block(b).dup }
 
       blocks.each do |n|
         (0..10).each do |i|
           next if i == 6
-          n[i] = resolve(n[i], t, r1, r2, r3) if n[i].is_a?(String)
+          n[i] = resolve(n[i], t, r1, r2, r3, nil, r4, r5, r6) if n[i].is_a?(String)
         end
         (0..10).each do |i|
           next if i == 6
-          n[i] = resolve(n[i], t, r1, r2, r3, n) if n[i].is_a?(String)
+          n[i] = resolve(n[i], t, r1, r2, r3, n, r4, r5, r6) if n[i].is_a?(String)
         end
       end
 

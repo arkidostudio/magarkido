@@ -605,6 +605,25 @@ html, body {
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fg-hint {
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  opacity: .6;
+  flex: 1;
+}
+.expr-hint {
+  margin: 6px 10px 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  opacity: .75;
 }
 
 .frow {
@@ -861,17 +880,30 @@ html, body {
 #helpbox {
   background: var(--surface);
   border-radius: 10px;
-  padding: 18px;
-  max-width: 320px;
-  width: 90%;
+  padding: 18px 20px;
+  max-width: 380px;
+  width: 92%;
+  max-height: 80vh;
+  overflow-y: auto;
   box-shadow: 0 8px 32px rgba(0,0,0,.2);
 }
-#helpbox h3 { font-size: 13px; margin-bottom: 10px; color: var(--text); }
-#helpbox p  { font-size: 12px; color: var(--muted); margin: 8px 0; line-height: 1.5; }
-#helpbox code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #b06000; }
-
-.htbl { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-.htbl th, .htbl td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+#helpbox h3 { font-size: 13px; margin: 0 0 12px; color: var(--text); font-weight: 700; }
+#helpbox p  { font-size: 11.5px; color: var(--muted); margin: 6px 0; line-height: 1.5; }
+#helpbox code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: var(--accent); font-family: monospace; }
+.hsec {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+  margin: 14px 0 6px;
+}
+.htxt { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 4px 0; }
+.hclose { font-size: 10.5px; color: var(--muted); opacity: .5; margin-top: 14px; text-align: center; }
+.htbl { width: 100%; border-collapse: collapse; font-size: 11px; margin: 4px 0; }
+.htbl th, .htbl td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--border); }
 .htbl th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; }
-.htbl td:first-child { font-family: monospace; color: var(--accent); }
+.htbl td:first-child { font-family: monospace; color: var(--accent); white-space: nowrap; }
 .htbl td:last-child  { color: var(--text); }

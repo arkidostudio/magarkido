@@ -92,14 +92,49 @@
 <!-- ── Help overlay ───────────────────────────────────── -->
 <div id="helpov" class="hidden" onclick="this.classList.add('hidden')">
   <div id="helpbox" onclick="event.stopPropagation()">
-    <h3>Expression reference</h3>
+    <h3>Pattern Editor Guide</h3>
+
+    <div class="hsec">Block List</div>
+    <p class="htxt">Each row is one box in the pattern. Drag the <b>⠿</b> handle to reorder — list order = draw order in the preview (first = furthest back). Use <b>↑ / ↓</b> buttons or drag. Click a block to select it; click again to deselect. You can also click directly on the canvas to pick a block.</p>
+
+    <div class="hsec">Position &amp; Size</div>
+    <table class="htbl">
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td>x</td><td>Left/right offset (red axis)</td></tr>
+      <tr><td>y</td><td>Front/back depth offset (green axis)</td></tr>
+      <tr><td>z</td><td>Height offset from ground (blue axis)</td></tr>
+      <tr><td>w</td><td>Width of the block (X extent)</td></tr>
+      <tr><td>d</td><td>Depth of the block (Y extent)</td></tr>
+      <tr><td>h</td><td>Height of the block (Z extent)</td></tr>
+    </table>
+    <p class="htxt">Only proportions matter — blocks are scaled to fit the target group's bounding box.</p>
+
+    <div class="hsec">Detail Lines</div>
+    <table class="htbl">
+      <tr><th>Option</th><th>Meaning</th></tr>
+      <tr><td>None</td><td>Solid block, no lines</td></tr>
+      <tr><td>≡ Horizontal</td><td>Evenly spaced horizontal grooves</td></tr>
+      <tr><td>||| Vertical</td><td>Evenly spaced vertical grooves</td></tr>
+      <tr><td>Face 0–5</td><td>Which face the lines appear on (0 = front)</td></tr>
+      <tr><td>seg</td><td>Number of line segments (min 2)</td></tr>
+      <tr><td>offset</td><td>Inset of lines from block edges</td></tr>
+    </table>
+
+    <div class="hsec">Expression Tokens</div>
     <table class="htbl">
       <tr><th>Token</th><th>Meaning</th></tr>
-      <tr><td>r1, r2, r3</td><td>Random 0 or 1 (re-rolled per building)</td></tr>
-      <tr><td>lv(t,3.5)</td><td>Floor count — target height ÷ floor height</td></tr>
+      <tr><td>r1 … r6</td><td>Random 0 or 1, fixed per building instance</td></tr>
+      <tr><td>rand(n)</td><td>Random integer 0 to n−1, per instance</td></tr>
+      <tr><td>lv(t, 3.5)</td><td>Floor count = target height ÷ 3.5 m per floor</td></tr>
+      <tr><td>w, d, h, x, y, z…</td><td>Resolved value of another field in this block</td></tr>
     </table>
-    <p>Combine freely: <code>"r1*10+20"</code>, <code>"lv(t,3)+r2*2"</code></p>
-    <p style="font-size:11px;opacity:.6;margin-top:8px">Click anywhere to close</p>
+    <p class="htxt">Examples: <code>"lv(t,3.5)*3"</code> &nbsp;·&nbsp; <code>"r1*10+20"</code> &nbsp;·&nbsp; <code>"70+r4*4"</code> &nbsp;·&nbsp; <code>"rand(4)*5"</code></p>
+    <p class="htxt">Use <b>fx</b> on any field to switch it to expression mode.</p>
+
+    <div class="hsec">Canvas Controls</div>
+    <p class="htxt"><b>◀ ▶</b> Rotate view &nbsp;·&nbsp; <b>Rnd</b> Re-roll random values &nbsp;·&nbsp; <b>↺</b> Redraw &nbsp;·&nbsp; <b>▶ Test</b> Apply to selected SketchUp objects as a preview</p>
+
+    <p class="hclose">Click anywhere outside to close</p>
   </div>
 </div>
 
@@ -352,7 +387,7 @@ function applyPtn() {
 
 // ── Editor state ──────────────────────────────────────
 var edBlocks = [], selBlockIdx = -1, edHistory = [];
-var r1=1, r2=0, r3=1;
+var r1=1, r2=0, r3=1, r4=0, r5=1, r6=0;
 var edSourceFile = ''; // name of the .mgz file the current pattern came from
 
 function pushHistory() {
@@ -642,24 +677,27 @@ function renderInspector() {
   var p1={};
   P1KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,PREVIEW_H,null); });
   el.innerHTML=''
-    +'<div class="fg"><div class="fg-head">Position</div>'
-    +eRow('x',b.x,ex.x,0,80,p1)+eRow('y',b.y,ex.y,0,80,p1)+eRow('z',b.z,ex.z,0,90,p1)+'</div>'
-    +'<div class="fg"><div class="fg-head">Size</div>'
-    +eRow('w',b.w,ex.w,1,80,p1)+eRow('d',b.d,ex.d,1,80,p1)+eRow('h',b.h,ex.h,1,90,p1)+'</div>'
-    +'<div class="fg"><div class="fg-head">Material</div>'
+    +'<div class="fg"><div class="fg-head">Position <span class="fg-hint">offset from pattern origin</span></div>'
+    +eRow('x',b.x,ex.x,0,80,p1,'Left/right (red axis)')+eRow('y',b.y,ex.y,0,80,p1,'Front/back (green axis)')+eRow('z',b.z,ex.z,0,90,p1,'Up from ground (blue axis)')+'</div>'
+    +'<div class="fg"><div class="fg-head">Size <span class="fg-hint">proportions matter, not absolute scale</span></div>'
+    +eRow('w',b.w,ex.w,1,80,p1,'Width (X extent)')+eRow('d',b.d,ex.d,1,80,p1,'Depth (Y extent)')+eRow('h',b.h,ex.h,1,90,p1,'Height (Z extent)')+'</div>'
+    +'<div class="fg"><div class="fg-head">Material <span class="fg-hint">click swatch to assign · click colour to change</span></div>'
     +'<div class="frow mat-frow"><div class="mat-row" id="mat-row"></div>'
-    +'<button class="mat-add-btn" onclick="addMatKey()" title="Add material key">+</button></div></div>'
-    +'<div class="fg"><div class="fg-head">Detail</div><div class="frow"><div class="det-row">'
-    +'<button class="dchip'+(b.detail===0?' active':'')+'" onclick="setDetail(0)">None</button>'
-    +'<button class="dchip'+(b.detail===1?' active':'')+'" onclick="setDetail(1)" title="Horizontal lines">&#8801;</button>'
-    +'<button class="dchip'+(b.detail===2?' active':'')+'" onclick="setDetail(2)" title="Vertical lines">|||</button>'
+    +'<button class="mat-add-btn" onclick="addMatKey()" title="Add new material key">+</button></div></div>'
+    +'<div class="fg"><div class="fg-head">Detail lines <span class="fg-hint">surface grooves on this block</span></div><div class="frow"><div class="det-row">'
+    +'<button class="dchip'+(b.detail===0?' active':'')+'" onclick="setDetail(0)" title="No detail lines">None</button>'
+    +'<button class="dchip'+(b.detail===1?' active':'')+'" onclick="setDetail(1)" title="Horizontal grooves">&#8801; Horiz</button>'
+    +'<button class="dchip'+(b.detail===2?' active':'')+'" onclick="setDetail(2)" title="Vertical grooves">||| Vert</button>'
     +'</div></div></div>'
     +(b.detail!==0
-      ?'<div class="fg"><div class="fg-head">Detail Options</div>'
-        +'<div class="frow"><span class="flbl">Face</span><div class="face-row">'
-        +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')">'+f+'</button>';}).join('')
-        +'</div></div>'+eRow('seg',b.seg,ex.seg,2,20,p1)+eRow('offset',b.offset,ex.offset,0,8,p1)+'</div>'
+      ?'<div class="fg"><div class="fg-head">Detail options</div>'
+        +'<div class="frow"><span class="flbl" title="Which face the lines appear on (0 = front/Y+)">Face</span><div class="face-row">'
+        +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')" title="Face '+f+'">'+f+'</button>';}).join('')
+        +'</div></div>'
+        +eRow('seg',b.seg,ex.seg,2,20,p1,'Number of line segments')
+        +eRow('offset',b.offset,ex.offset,0,8,p1,'Inset from block edges')+'</div>'
       :'')
+    +'<div class="expr-hint">Tip: press <b>fx</b> on any field to write an expression — use <b>r1–r6</b>, <b>rand(n)</b>, <b>lv(t,3.5)</b> or peer fields like <b>h</b>, <b>w</b>.</div>'
     +'<button class="del-btn" onclick="deleteBlock('+selBlockIdx+')">Remove block</button>';
   renderMatRow();
 }
@@ -678,7 +716,7 @@ function renderMatRow() {
   }).join('');
 }
 
-function eRow(key,val,isExpr,mn,mx,p1fields) {
+function eRow(key,val,isExpr,mn,mx,p1fields,hint) {
   var num=typeof val==='number'?val:parseFloat(val)||0;
   var strVal=typeof val==='string'?val:String(num);
   var clamped=Math.min(mx,Math.max(mn,num));
@@ -689,13 +727,14 @@ function eRow(key,val,isExpr,mn,mx,p1fields) {
     var ok=typeof resolved==='number'&&isFinite(resolved)&&!isNaN(resolved);
     badge='<span class="expr-badge '+(ok?'ok':'err')+'" id="eb-'+key+'">'+(ok?('= '+(Math.round(resolved*100)/100)):'⚠ err')+'</span>';
   }
-  return '<div class="frow"><span class="flbl">'+key+'</span><div class="fexpr-wrap">'
+  var titleAttr=hint?' title="'+hint+'"':'';
+  return '<div class="frow"><span class="flbl"'+titleAttr+'>'+key+'</span><div class="fexpr-wrap">'
     +(isExpr
       ?'<input type="text" class="fexpr-inp expr-mode" value="'+strVal+'" oninput="setFieldExpr(\''+key+'\',this.value)">'+badge
       :'<input type="range" class="fslider" min="'+mn+'" max="'+mx+'" step="1" value="'+clamped+'"'
        +' oninput="setField(\''+key+'\',parseFloat(this.value));document.getElementById(\'fv-'+key+'\').textContent=this.value">'
        +'<span class="fval" id="fv-'+key+'">'+num+'</span>')
-    +'<button class="fxtog'+(isExpr?' on':'')+'" onclick="toggleExpr(\''+key+'\')">'+(isExpr?'#':'fx')+'</button>'
+    +'<button class="fxtog'+(isExpr?' on':'')+'" onclick="toggleExpr(\''+key+'\')" title="Toggle expression mode">'+(isExpr?'#':'fx')+'</button>'
     +'</div></div>';
 }
 
@@ -750,6 +789,7 @@ function addMatKey() {
 // ── ISO canvas ────────────────────────────────────────
 var canvas=null, ctx=null;
 var canvasRot=0;
+var _idBuf=null, _idBufW=0, _idBufH=0; // block-ID buffer for click-to-select
 
 // Draw after a short delay; if canvas still has no size, retry once more.
 function drawISODeferred(){
@@ -774,6 +814,23 @@ function initCanvas(){
   canvas=document.getElementById('iso-canvas');
   ctx=canvas.getContext('2d');
   syncCanvasSize();
+  canvas.addEventListener('click',function(e){
+    if(!_idBuf) return;
+    var rect=canvas.getBoundingClientRect();
+    var dpr=window.devicePixelRatio||1;
+    var px2=Math.round((e.clientX-rect.left)*dpr);
+    var py2=Math.round((e.clientY-rect.top)*dpr);
+    if(px2<0||px2>=_idBufW||py2<0||py2>=_idBufH) return;
+    var blIdx=_idBuf[py2*_idBufW+px2];
+    if(blIdx<0){selBlockIdx=-1;}
+    else{selBlockIdx=blIdx===selBlockIdx?-1:blIdx;}
+    renderBlockList(); renderInspector(); drawISO();
+    // scroll selected chip into view
+    if(selBlockIdx>=0){
+      var chip=document.querySelector('#blitems .bchip.active');
+      if(chip) chip.scrollIntoView({block:'nearest'});
+    }
+  });
 }
 
 function syncCanvasSize(){
@@ -785,11 +842,14 @@ function syncCanvasSize(){
   if(h>4) canvas.height=h;
 }
 
-function evalExpr(v,r1v,r2v,r3v,ph,fields){
+function evalExpr(v,r1v,r2v,r3v,ph,fields,r4v,r5v,r6v){
   if(typeof v==='number')return v;
+  r4v=r4v!==undefined?r4v:r4; r5v=r5v!==undefined?r5v:r5; r6v=r6v!==undefined?r6v:r6;
   var s=String(v);
   s=s.replace(/lv\(t,([\d.]+)\)/g,function(_,fh){return Math.round(ph/parseFloat(fh));});
+  s=s.replace(/rand\((\d+)\)/g,function(_,n){return Math.floor((r1v*4+r2v*2+r3v)%parseInt(n));});
   s=s.replace(/\br1\b/g,r1v).replace(/\br2\b/g,r2v).replace(/\br3\b/g,r3v);
+  s=s.replace(/\br4\b/g,r4v).replace(/\br5\b/g,r5v).replace(/\br6\b/g,r6v);
   if(fields){
     ['x','y','z','w','d','h','seg','offset'].forEach(function(k){
       if(fields[k]!==undefined) s=s.replace(new RegExp('\\b'+k+'\\b','g'),String(fields[k]));
@@ -798,7 +858,7 @@ function evalExpr(v,r1v,r2v,r3v,ph,fields){
   try{return Function('"use strict";return('+s+')')();}catch(e){return 10;}
 }
 
-function randomize(){r1=Math.round(Math.random());r2=Math.round(Math.random());r3=Math.round(Math.random());drawISO();}
+function randomize(){r1=Math.round(Math.random());r2=Math.round(Math.random());r3=Math.round(Math.random());r4=Math.round(Math.random());r5=Math.round(Math.random());r6=Math.round(Math.random());drawISO();}
 
 function hexToRgb(hex){
   if(typeof hex==='number') return [(hex>>16)&0xff,(hex>>8)&0xff,hex&0xff];
@@ -848,17 +908,15 @@ function drawISO(){
   var cx=W*0.5, cy=H*0.5;
   function ip(x,y,z){return{x:cx+(x-y)*S*0.866, y:cy+(x+y)*S*0.5-z*S};}
 
-  // ── Z-buffer pixel fill ────────────────────────────────
+  // ── Z-buffer + ID buffer pixel fill ───────────────────
   var imgData=ctx.createImageData(W,H);
   var px=imgData.data;
-  // fill background #f0f4f8
   for(var i=0;i<W*H;i++){px[i*4]=240;px[i*4+1]=244;px[i*4+2]=248;px[i*4+3]=255;}
   var depthBuf=new Float32Array(W*H).fill(-1e9);
+  var idBuf=new Int32Array(W*H).fill(-1);
+  _idBuf=idBuf; _idBufW=W; _idBufH=H;
 
-  // Rasterize one parallelogram face into the depth buffer.
-  // Corners in 3D: c0,c1 define edge-u; c0,c3 define edge-v. c2 = c1+(c3-c0).
-  // Depth metric: x+y+z (higher = closer to viewer).
-  function rasterFace(c0,c1,c3,r,g,b2){
+  function rasterFace(c0,c1,c3,r,g,b2,blIdx){
     var sp0=ip(c0[0],c0[1],c0[2]);
     var sp1=ip(c1[0],c1[1],c1[2]);
     var sp3=ip(c3[0],c3[1],c3[2]);
@@ -883,6 +941,7 @@ function drawISO(){
         var idx=py2*W+px2;
         if(depth>depthBuf[idx]){
           depthBuf[idx]=depth;
+          idBuf[idx]=blIdx;
           var pi4=idx*4;
           px[pi4]=r; px[pi4+1]=g; px[pi4+2]=b2; px[pi4+3]=255;
         }
@@ -890,17 +949,14 @@ function drawISO(){
     }
   }
 
-  norm.forEach(function(bl){
+  norm.forEach(function(bl,blIdx){
     var rgb=edClrs[bl.mat]?hexToRgb(edClrs[bl.mat]):[100,120,140];
     var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
     function sc(f){return [Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];}
     var cf=sc(0.62), cr=sc(0.78), ct=sc(1.0);
-    // front face (y+d): corners c0=(x,y+d,z), c1=(x+w,y+d,z), c3=(x,y+d,z+h)
-    rasterFace([x,y+d,z],[x+w,y+d,z],[x,y+d,z+h], cf[0],cf[1],cf[2]);
-    // right face (x+w): corners c0=(x+w,y,z), c1=(x+w,y+d,z), c3=(x+w,y,z+h)
-    rasterFace([x+w,y,z],[x+w,y+d,z],[x+w,y,z+h], cr[0],cr[1],cr[2]);
-    // top face (z+h): corners c0=(x,y,z+h), c1=(x+w,y,z+h), c3=(x,y+d,z+h)
-    rasterFace([x,y,z+h],[x+w,y,z+h],[x,y+d,z+h], ct[0],ct[1],ct[2]);
+    rasterFace([x,y+d,z],[x+w,y+d,z],[x,y+d,z+h], cf[0],cf[1],cf[2], blIdx);
+    rasterFace([x+w,y,z],[x+w,y+d,z],[x+w,y,z+h], cr[0],cr[1],cr[2], blIdx);
+    rasterFace([x,y,z+h],[x+w,y,z+h],[x,y+d,z+h], ct[0],ct[1],ct[2], blIdx);
   });
 
   ctx.putImageData(imgData,0,0);
@@ -912,6 +968,13 @@ function drawISO(){
   for(var gi=1;gi<gp.length;gi++)ctx.lineTo(gp[gi].x,gp[gi].y);
   ctx.closePath();ctx.stroke();
 
+  // Check if a face's centre pixel is owned by this block (face not occluded)
+  function faceOwned(cx2,cy2,blIdx){
+    var px2=Math.round(cx2), py2=Math.round(cy2);
+    if(px2<0||px2>=W||py2<0||py2>=H) return false;
+    return idBuf[py2*W+px2]===blIdx;
+  }
+
   // ── Edge lines + detail lines + selection outline ──────
   function strokePath(pts,style,lw){
     ctx.strokeStyle=style;ctx.lineWidth=lw;
@@ -921,34 +984,54 @@ function drawISO(){
   }
   function p2(px2,py2,pz2){return ip(px2,py2,pz2);}
 
-  norm.forEach(function(bl){
+  norm.forEach(function(bl,blIdx){
     var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
-    // Thin edges
-    strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
-    strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
-    strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
-    // Detail lines
-    if(bl.detail!==0&&bl.seg>1){
-      ctx.strokeStyle='rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
-      var n=bl.seg;
-      for(var s=1;s<n;s++){
-        if(bl.detail===1){
-          var fz=z+h*s/n;
-          ctx.beginPath();var l=p2(x,y+d,fz),rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
-          ctx.beginPath();l=p2(x+w,y,fz);rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
-        } else {
-          var fx=x+w*s/n;
-          ctx.beginPath();var a2=p2(fx,y+d,z),b3=p2(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
-          var fy=y+d*s/n;
-          ctx.beginPath();a2=p2(x+w,fy,z);b3=p2(x+w,fy,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
+    var isSel=bl._origIdx===selBlockIdx;
+    var edgeCol=isSel?'rgba(60,140,255,0.9)':'rgba(0,0,0,0.13)';
+    var edgeLw=isSel?2*dpr:0.5*dpr;
+
+    // Front face (y+d) — centre at (x+w/2, y+d, z+h/2)
+    var fcFront=ip(x+w/2,y+d,z+h/2);
+    if(faceOwned(fcFront.x,fcFront.y,blIdx)){
+      strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],edgeCol,edgeLw);
+      if(bl.detail!==0&&bl.seg>1){
+        ctx.strokeStyle=isSel?'rgba(60,140,255,0.6)':'rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
+        var n=bl.seg;
+        for(var s=1;s<n;s++){
+          if(bl.detail===1){
+            var fz=z+h*s/n;
+            ctx.beginPath();var l=p2(x,y+d,fz),rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
+          } else {
+            var fx=x+w*s/n;
+            ctx.beginPath();var a2=p2(fx,y+d,z),b3=p2(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
+          }
         }
       }
     }
-    // Selection outline
-    if(bl._origIdx===selBlockIdx){
-      strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(60,140,255,0.9)',2*dpr);
-      strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],'rgba(60,140,255,0.9)',2*dpr);
-      strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(60,140,255,0.9)',2*dpr);
+
+    // Right face (x+w) — centre at (x+w, y+d/2, z+h/2)
+    var fcRight=ip(x+w,y+d/2,z+h/2);
+    if(faceOwned(fcRight.x,fcRight.y,blIdx)){
+      strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],edgeCol,edgeLw);
+      if(bl.detail!==0&&bl.seg>1){
+        ctx.strokeStyle=isSel?'rgba(60,140,255,0.6)':'rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
+        var n2=bl.seg;
+        for(var s2=1;s2<n2;s2++){
+          if(bl.detail===1){
+            var fz2=z+h*s2/n2;
+            ctx.beginPath();var l2=p2(x+w,y,fz2),rr2=p2(x+w,y+d,fz2);ctx.moveTo(l2.x,l2.y);ctx.lineTo(rr2.x,rr2.y);ctx.stroke();
+          } else {
+            var fy=y+d*s2/n2;
+            ctx.beginPath();var a3=p2(x+w,fy,z),b4=p2(x+w,fy,z+h);ctx.moveTo(a3.x,a3.y);ctx.lineTo(b4.x,b4.y);ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // Top face (z+h) — centre at (x+w/2, y+d/2, z+h)
+    var fcTop=ip(x+w/2,y+d/2,z+h);
+    if(faceOwned(fcTop.x,fcTop.y,blIdx)){
+      strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],edgeCol,edgeLw);
     }
   });
 }
