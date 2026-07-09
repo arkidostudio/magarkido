@@ -14,9 +14,9 @@
     <span id="logo">MAGARKIDO</span>
     <span id="tsub">v0.5.0</span>
     <button class="hbtn" onclick="su('importMgzSession')" title="Load a .mgz file into this session">&#128194; Load .mgz</button>
-    <button class="hbtn" onclick="newPattern()" title="New pattern">&#43; New</button>
-    <button class="hbtn" id="edit-ptn-btn" onclick="openEditor()" title="Edit selected pattern" disabled>&#9998; Edit Pattern</button>
-    <button class="hbtn danger-btn" onclick="deleteSel()" title="Delete selected objects from model">&#128465; Delete</button>
+    <button class="hbtn files-only-btn" onclick="newPattern()" title="New pattern">&#43; New</button>
+    <button class="hbtn files-only-btn" id="edit-ptn-btn" onclick="openEditor()" title="Edit selected pattern" disabled>&#9998; Edit Pattern</button>
+    <button class="hbtn danger-btn files-only-btn" onclick="deleteSel()" title="Delete selected objects from model">&#128465; Delete</button>
   </header>
 
   <!-- Loaded files bar -->
@@ -199,6 +199,7 @@ function initPatterns() {
   renderNav();
   renderGrid();
   updateEditBtn();
+  generateThumbs();
 }
 
 // ── Loaded files bar ──────────────────────────────────
@@ -239,20 +240,33 @@ function refreshAll(newPtns, newFiles, newClrs) {
   loadedFiles = newFiles;
   edClrs = normalizeClrs(newClrs || {});
   if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+  // Reset to all-patterns view when files change; keep category if still valid
+  if (selCatName !== null && selCatName !== 'auto' && !patterns[selCatName]) selCatName = null;
+  if (!loadedFiles.length) selCatName = null;
   renderFiles();
   renderNav();
   renderGrid();
   updateEditBtn();
   closeEditor();
+  generateThumbs();
 }
 
 // ── Main view ─────────────────────────────────────────
-var selCatName = 'auto', selKeys = [];
+var selCatName = null, selKeys = []; // null = all-patterns landing
+var _thumbCache = {}; // cacheKey: cat+'::'+name → data URL
 var CAT_ICONS = {Skyscraper:'🏙',TierBuilding:'🏢',Apartment:'🏬',Villa:'🏡'};
 
 function renderNav() {
   var container = document.getElementById('rail-cats');
   container.innerHTML = '';
+  // All button (landing state)
+  var allBtn = document.createElement('button');
+  allBtn.className = 'cbtn' + (selCatName === null ? ' active' : '');
+  allBtn.dataset.cat = '__all__';
+  allBtn.onclick = function(){ selCat(allBtn); };
+  allBtn.innerHTML = '<span class="cico">&#8984;</span><span class="clbl">All</span>';
+  allBtn.title = 'Show all patterns from all categories';
+  container.appendChild(allBtn);
   Object.keys(patterns).forEach(function(cat) {
     var btn = document.createElement('button');
     btn.className = 'cbtn' + (cat === selCatName ? ' active' : '');
@@ -262,10 +276,10 @@ function renderNav() {
     btn.innerHTML = '<span class="cico">'+ico+'</span><span class="clbl">'+cat+'</span>';
     container.appendChild(btn);
   });
-  if (selCatName !== 'auto' && !patterns[selCatName]) {
-    selCatName = 'auto';
+  if (selCatName !== null && selCatName !== 'auto' && !patterns[selCatName]) {
+    selCatName = null;
     document.querySelectorAll('.cbtn').forEach(function(b){
-      b.classList.toggle('active', b.dataset.cat === 'auto');
+      b.classList.toggle('active', b.dataset.cat === '__all__');
     });
   }
   var sel = document.getElementById('ptn-cat');
@@ -292,7 +306,8 @@ function onCatChange(sel) {
 function selCat(btn) {
   document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  selCatName = btn.dataset.cat;
+  var cat = btn.dataset.cat;
+  selCatName = (cat === '__all__') ? null : cat;
   renderGrid();
   updateEditBtn();
 }
@@ -300,35 +315,79 @@ function selCat(btn) {
 function updateEditBtn() {
   var btn = document.getElementById('edit-ptn-btn');
   if (!btn) return;
-  var canEdit = selCatName !== 'auto' && Object.keys(patterns[selCatName] || {}).length > 0;
+  var canEdit = selCatName !== null && selCatName !== 'auto' && Object.keys(patterns[selCatName] || {}).length > 0;
   btn.disabled = !canEdit;
+}
+
+function setShellState(hasFiles) {
+  var shell = document.getElementById('shell');
+  shell.classList.toggle('no-files', !hasFiles);
+}
+
+function renderCard(g, cat, key) {
+  var isSel = selKeys.some(function(s){return s.category===cat&&s.pattern===key;});
+  var card = document.createElement('div');
+  card.className = 'pcard' + (isSel ? ' sel' : '');
+  var thumb = document.createElement('div'); thumb.className = 'pthumb';
+  var cached = _thumbCache[cat+'::'+key];
+  if (cached) {
+    var img = document.createElement('img'); img.src = cached; img.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
+    thumb.appendChild(img);
+  } else {
+    thumb.innerHTML = '<span class="thumb-ph">' + key.slice(0,5).toUpperCase() + '</span>';
+  }
+  if (isSel) { var chk=document.createElement('div');chk.className='chk';chk.textContent='✓';card.appendChild(chk); }
+  var lbl = document.createElement('div'); lbl.className = 'plbl'; lbl.textContent = key;
+  card.appendChild(thumb); card.appendChild(lbl);
+  card.dataset.key = cat+'::'+key;
+  card.onclick = function(){ toggleCard(cat, key, card); };
+  g.appendChild(card);
 }
 
 function renderGrid() {
   var g = document.getElementById('grid');
   g.innerHTML = '';
+  var hasFiles = loadedFiles.length > 0;
+  setShellState(hasFiles);
+
+  if (!hasFiles) {
+    g.innerHTML = '<div class="empty-cta">'
+      + '<div class="empty-cta-title">No patterns loaded</div>'
+      + '<div class="empty-cta-sub">Load a .mgz file to browse and apply patterns</div>'
+      + '<button class="empty-cta-btn" onclick="su(\'importMgzSession\')">&#8594; Load .mgz</button>'
+      + '</div>';
+    selKeys = []; updateSummary(); return;
+  }
+
   if (selCatName === 'auto') {
     g.innerHTML = '<p class="empty-msg">⚡ Auto mode — hover the Auto button for details</p>';
     selKeys = []; updateSummary(); return;
   }
+
+  if (selCatName === null) {
+    // All-patterns flat grid
+    var allCats = Object.keys(patterns);
+    if (!allCats.length) {
+      g.innerHTML = '<p class="empty-msg">No patterns found in loaded files.</p>';
+      updateSummary(); return;
+    }
+    allCats.forEach(function(cat) {
+      var keys = Object.keys(patterns[cat] || {});
+      if (!keys.length) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cat-section-head';
+      hdr.textContent = (CAT_ICONS[cat]||'') + ' ' + cat;
+      g.appendChild(hdr);
+      keys.forEach(function(key){ renderCard(g, cat, key); });
+    });
+    updateSummary(); return;
+  }
+
+  // Single category view
   var pool = patterns[selCatName] || {};
   var keys = Object.keys(pool);
-  if (!keys.length) { g.innerHTML = '<p class="empty-msg">No patterns in this category</p>'; return; }
-  keys.forEach(function(key) {
-    var isSel = selKeys.some(function(s){return s.category===selCatName&&s.pattern===key;});
-    var card = document.createElement('div');
-    card.className = 'pcard' + (isSel ? ' sel' : '');
-    var thumb = document.createElement('div'); thumb.className = 'pthumb';
-    thumb.innerHTML = '<span class="thumb-ph">' + key.toUpperCase() + '</span>';
-    var img = document.createElement('img');
-    img.src = 'previews/' + key + '.png';
-    img.onload = function(){ thumb.innerHTML = ''; thumb.appendChild(img); };
-    if (isSel) { var chk=document.createElement('div');chk.className='chk';chk.textContent='✓';card.appendChild(chk); }
-    var lbl = document.createElement('div'); lbl.className = 'plbl'; lbl.textContent = key;
-    card.appendChild(thumb); card.appendChild(lbl);
-    card.onclick = function(){ toggleCard(selCatName, key, card); };
-    g.appendChild(card);
-  });
+  if (!keys.length) { g.innerHTML = '<p class="empty-msg">No patterns in this category.</p>'; updateSummary(); return; }
+  keys.forEach(function(key){ renderCard(g, selCatName, key); });
   updateSummary();
 }
 
@@ -354,7 +413,7 @@ function updateSummary() {
     hideMgrPreview(); return;
   }
   if (!selKeys.length) {
-    hintEl.textContent = 'No patterns selected — click cards to select';
+    hintEl.textContent = loadedFiles.length ? 'No patterns selected — click cards to select' : '';
     hideMgrPreview(); return;
   }
   hintEl.textContent = '';
@@ -382,18 +441,29 @@ function updateSummary() {
 
 function selectAll() {
   if (selCatName === 'auto') return;
-  var pool = patterns[selCatName] || {};
-  selKeys = Object.keys(pool).map(function(k){ return {category:selCatName, pattern:k}; });
+  if (selCatName === null) {
+    selKeys = [];
+    Object.keys(patterns).forEach(function(cat){
+      Object.keys(patterns[cat]||{}).forEach(function(k){ selKeys.push({category:cat,pattern:k}); });
+    });
+  } else {
+    selKeys = Object.keys(patterns[selCatName]||{}).map(function(k){ return {category:selCatName,pattern:k}; });
+  }
   syncSelectionToRuby(); renderGrid(); updateSummary();
 }
 
 function randomizeSelection() {
   if (selCatName === 'auto') return;
-  var pool = patterns[selCatName] || {};
-  var keys = Object.keys(pool);
-  if (!keys.length) return;
-  var pick = keys[Math.floor(Math.random()*keys.length)];
-  selKeys = [{category:selCatName, pattern:pick}];
+  var allPairs = [];
+  if (selCatName === null) {
+    Object.keys(patterns).forEach(function(cat){
+      Object.keys(patterns[cat]||{}).forEach(function(k){ allPairs.push({category:cat,pattern:k}); });
+    });
+  } else {
+    Object.keys(patterns[selCatName]||{}).forEach(function(k){ allPairs.push({category:selCatName,pattern:k}); });
+  }
+  if (!allPairs.length) return;
+  selKeys = [allPairs[Math.floor(Math.random()*allPairs.length)]];
   syncSelectionToRuby(); renderGrid(); updateSummary();
 }
 
@@ -433,35 +503,17 @@ function mgrRotateNorm(bl) {
   return bl;
 }
 
-function drawMgrPreview(blks) {
-  if (!mgrCanvas||!mgrCtx||!blks||!blks.length) return;
-  var W=mgrCanvas.width, H=mgrCanvas.height;
-  if (!W||!H) return;
-  var dpr=window.devicePixelRatio||1;
-  var ph=10, rv=[1,0,1,0,1,0];
-  var EKEYS=['x','y','z','w','d','h','seg','offset'];
-  var solved=blks.map(function(b){
-    var p1={}; EKEYS.forEach(function(k){p1[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,null,rv[3],rv[4],rv[5]);});
-    var p2={}; EKEYS.forEach(function(k){p2[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]);});
-    return{x:p2.x||0,y:p2.y||0,z:p2.z||0,
-           w:Math.max(0.001,p2.w||1),d:Math.max(0.001,p2.d||1),h:Math.max(0.001,p2.h||1),
-           mat:b.mat,detail:b.detail||0,face:Math.round(evalExpr(b.face,rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]))||0,
-           seg:Math.max(2,parseInt(p2.seg)||6)};
-  });
-  var maxX=0.001,maxY=0.001,maxZ=0.001;
-  solved.forEach(function(b){maxX=Math.max(maxX,b.x+b.w);maxY=Math.max(maxY,b.y+b.d);maxZ=Math.max(maxZ,b.z+b.h);});
-  var norm=solved.map(function(b){
-    return mgrRotateNorm({x:b.x/maxX,y:b.y/maxY,z:b.z/maxZ,
-      w:b.w/maxX,d:b.d/maxY,h:b.h/maxZ,mat:b.mat,detail:b.detail,face:b.face,seg:b.seg});
-  });
-  var pad=10*dpr, S=Math.min((W-pad*2)/1.732,(H-pad*2)/2);
+// ── Shared ISO rasterizer ─────────────────────────────
+// norm: array of {x,y,z,w,d,h,mat,detail,seg} in 0-1 space
+function isoRasterize(ctx, W, H, norm, dpr) {
+  var pad=Math.max(4,8*dpr), S=Math.min((W-pad*2)/1.732,(H-pad*2)/2);
   var cx=W*0.5, cy=H*0.5;
   function ip(x,y,z){return{x:cx+(x-y)*S*0.866,y:cy+(x+y)*S*0.5-z*S};}
-  var imgData=mgrCtx.createImageData(W,H);
+  var imgData=ctx.createImageData(W,H);
   var px=imgData.data;
   for(var i=0;i<W*H;i++){px[i*4]=240;px[i*4+1]=244;px[i*4+2]=248;px[i*4+3]=255;}
   var depthBuf=new Float32Array(W*H).fill(-1e9);
-  var idBuf2=new Int32Array(W*H).fill(-1);
+  var idBuf=new Int32Array(W*H).fill(-1);
   function rf(c0,c1,c3,r,g,b2,bi){
     var sp0=ip(c0[0],c0[1],c0[2]),sp1=ip(c1[0],c1[1],c1[2]),sp3=ip(c3[0],c3[1],c3[2]);
     var d0=c0[0]+c0[1]+c0[2],d1=c1[0]+c1[1]+c1[2],d3=c3[0]+c3[1]+c3[2];
@@ -477,7 +529,7 @@ function drawMgrPreview(blks) {
       var u=(ex*by-ey*bx)*inv,v=(ax*ey-ay*ex)*inv;
       if(u<-0.01||u>1.01||v<-0.01||v>1.01)continue;
       var depth=d0+u*(d1-d0)+v*(d3-d0),idx=py2*W+px2;
-      if(depth>depthBuf[idx]){depthBuf[idx]=depth;idBuf2[idx]=bi;var pi4=idx*4;px[pi4]=r;px[pi4+1]=g;px[pi4+2]=b2;px[pi4+3]=255;}
+      if(depth>depthBuf[idx]){depthBuf[idx]=depth;idBuf[idx]=bi;var pi4=idx*4;px[pi4]=r;px[pi4+1]=g;px[pi4+2]=b2;px[pi4+3]=255;}
     }}
   }
   function sc(rgb,f){return[Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];}
@@ -489,37 +541,107 @@ function drawMgrPreview(blks) {
     rf([x+w,y,z],[x+w,y+d,z],[x+w,y,z+h],cr[0],cr[1],cr[2],bi);
     rf([x,y,z+h],[x+w,y,z+h],[x,y+d,z+h],ct[0],ct[1],ct[2],bi);
   });
-  mgrCtx.putImageData(imgData,0,0);
-  function faceOwned2(fcx,fcy,bi){var px2=Math.round(fcx),py2=Math.round(fcy);if(px2<0||px2>=W||py2<0||py2>=H)return false;return idBuf2[py2*W+px2]===bi;}
-  function sp2(pts,lw){mgrCtx.lineWidth=lw;mgrCtx.beginPath();mgrCtx.moveTo(pts[0].x,pts[0].y);for(var i=1;i<pts.length;i++)mgrCtx.lineTo(pts[i].x,pts[i].y);mgrCtx.closePath();mgrCtx.stroke();}
+  ctx.putImageData(imgData,0,0);
+  function faceOwned(fcx,fcy,bi){var px2=Math.round(fcx),py2=Math.round(fcy);if(px2<0||px2>=W||py2<0||py2>=H)return false;return idBuf[py2*W+px2]===bi;}
+  function sp(pts,lw){ctx.lineWidth=lw;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(var i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();}
   function pp(px2,py2,pz2){return ip(px2,py2,pz2);}
   norm.forEach(function(bl,bi){
     var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
-    var fcFront=ip(x+w/2,y+d,z+h/2), fcRight=ip(x+w,y+d/2,z+h/2), fcTop=ip(x+w/2,y+d/2,z+h);
-    var visF=faceOwned2(fcFront.x,fcFront.y,bi);
-    var visR=faceOwned2(fcRight.x,fcRight.y,bi);
-    var visT=faceOwned2(fcTop.x,fcTop.y,bi);
-    mgrCtx.strokeStyle='rgba(0,0,0,0.13)';
-    if(visF) sp2([pp(x,y+d,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
-    if(visR) sp2([pp(x+w,y,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x+w,y,z+h)],0.5*dpr);
-    if(visT) sp2([pp(x,y,z+h),pp(x+w,y,z+h),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
-    // Detail lines
-    if(bl.detail!==0&&bl.seg>1){
-      mgrCtx.strokeStyle='rgba(0,0,0,0.22)'; mgrCtx.lineWidth=0.5*dpr;
+    var visF=faceOwned(ip(x+w/2,y+d,z+h/2).x,ip(x+w/2,y+d,z+h/2).y,bi);
+    var visR=faceOwned(ip(x+w,y+d/2,z+h/2).x,ip(x+w,y+d/2,z+h/2).y,bi);
+    var visT=faceOwned(ip(x+w/2,y+d/2,z+h).x,ip(x+w/2,y+d/2,z+h).y,bi);
+    ctx.strokeStyle='rgba(0,0,0,0.13)';
+    if(visF) sp([pp(x,y+d,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
+    if(visR) sp([pp(x+w,y,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x+w,y,z+h)],0.5*dpr);
+    if(visT) sp([pp(x,y,z+h),pp(x+w,y,z+h),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
+    if(bl.detail&&bl.seg>1){
+      ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=0.5*dpr;
       var n=bl.seg;
       for(var s=1;s<n;s++){
         if(bl.detail===1){
           var fz=z+h*s/n;
-          if(visF){mgrCtx.beginPath();var l=pp(x,y+d,fz),rr=pp(x+w,y+d,fz);mgrCtx.moveTo(l.x,l.y);mgrCtx.lineTo(rr.x,rr.y);mgrCtx.stroke();}
-          if(visR){mgrCtx.beginPath();l=pp(x+w,y,fz);rr=pp(x+w,y+d,fz);mgrCtx.moveTo(l.x,l.y);mgrCtx.lineTo(rr.x,rr.y);mgrCtx.stroke();}
+          if(visF){ctx.beginPath();var l=pp(x,y+d,fz),rr=pp(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();}
+          if(visR){ctx.beginPath();l=pp(x+w,y,fz);rr=pp(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();}
         } else {
           var fx=x+w*s/n, fy=y+d*s/n;
-          if(visF){mgrCtx.beginPath();var a2=pp(fx,y+d,z),b3=pp(fx,y+d,z+h);mgrCtx.moveTo(a2.x,a2.y);mgrCtx.lineTo(b3.x,b3.y);mgrCtx.stroke();}
-          if(visR){mgrCtx.beginPath();a2=pp(x+w,fy,z);b3=pp(x+w,fy,z+h);mgrCtx.moveTo(a2.x,a2.y);mgrCtx.lineTo(b3.x,b3.y);mgrCtx.stroke();}
+          if(visF){ctx.beginPath();var a2=pp(fx,y+d,z),b3=pp(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();}
+          if(visR){ctx.beginPath();a2=pp(x+w,fy,z);b3=pp(x+w,fy,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();}
         }
       }
     }
   });
+}
+
+function solveBlocks(blks) {
+  var ph=10, rv=[1,0,1,0,1,0];
+  var EKEYS=['x','y','z','w','d','h','seg','offset'];
+  return blks.map(function(b){
+    var p1={}; EKEYS.forEach(function(k){p1[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,null,rv[3],rv[4],rv[5]);});
+    var p2={}; EKEYS.forEach(function(k){p2[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]);});
+    return{x:p2.x||0,y:p2.y||0,z:p2.z||0,
+           w:Math.max(0.001,p2.w||1),d:Math.max(0.001,p2.d||1),h:Math.max(0.001,p2.h||1),
+           mat:b.mat,detail:b.detail||0,
+           face:Math.round(evalExpr(b.face,rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]))||0,
+           seg:Math.max(2,parseInt(p2.seg)||6)};
+  });
+}
+
+function normalizeBlocks(solved, rotFn) {
+  var maxX=0.001,maxY=0.001,maxZ=0.001;
+  solved.forEach(function(b){maxX=Math.max(maxX,b.x+b.w);maxY=Math.max(maxY,b.y+b.d);maxZ=Math.max(maxZ,b.z+b.h);});
+  return solved.map(function(b){
+    var n={x:b.x/maxX,y:b.y/maxY,z:b.z/maxZ,w:b.w/maxX,d:b.d/maxY,h:b.h/maxZ,mat:b.mat,detail:b.detail,face:b.face,seg:b.seg};
+    return rotFn ? rotFn(n) : n;
+  });
+}
+
+// ── Manager preview ───────────────────────────────────
+function drawMgrPreview(blks) {
+  if (!mgrCanvas||!mgrCtx||!blks||!blks.length) return;
+  var W=mgrCanvas.width, H=mgrCanvas.height;
+  if (!W||!H) return;
+  var dpr=window.devicePixelRatio||1;
+  var norm=normalizeBlocks(solveBlocks(blks), mgrRotateNorm);
+  isoRasterize(mgrCtx, W, H, norm, dpr);
+}
+
+// ── Thumbnail generation ──────────────────────────────
+var _thumbQueue=[], _thumbRunning=false;
+
+function generateThumbs() {
+  Object.keys(patterns).forEach(function(cat){
+    Object.keys(patterns[cat]||{}).forEach(function(name){
+      var key=cat+'::'+name;
+      if (!_thumbCache[key]) _thumbQueue.push({cat:cat,name:name,key:key});
+    });
+  });
+  if (!_thumbRunning) processThumbQueue();
+}
+
+function processThumbQueue() {
+  if (!_thumbQueue.length) { _thumbRunning=false; return; }
+  _thumbRunning=true;
+  var item=_thumbQueue.shift();
+  var rawBlocks=(patterns[item.cat]||{})[item.name];
+  if (rawBlocks&&rawBlocks.length) {
+    try {
+      var blks=rawBlocks.map(arrToBlock);
+      var norm=normalizeBlocks(solveBlocks(blks), null);
+      var oc=document.createElement('canvas'); oc.width=80; oc.height=68;
+      var ctx=oc.getContext('2d');
+      isoRasterize(ctx, 80, 68, norm, 1);
+      _thumbCache[item.key]=oc.toDataURL('image/jpeg',0.88);
+      // Update any already-rendered card thumb
+      var cards=document.querySelectorAll('.pcard[data-key="'+item.key+'"]');
+      cards.forEach(function(card){
+        var th=card.querySelector('.pthumb'); if(!th) return;
+        var img=document.createElement('img'); img.src=_thumbCache[item.key];
+        img.style.cssText='width:100%;height:100%;object-fit:cover;display:block';
+        th.innerHTML=''; th.appendChild(img);
+      });
+    } catch(e) {}
+  }
+  setTimeout(processThumbQueue, 0);
 }
 
 function deselectPattern(cat, key) {
