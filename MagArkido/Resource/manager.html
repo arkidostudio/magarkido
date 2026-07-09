@@ -30,16 +30,32 @@
     <nav id="rail">
       <div id="rail-cats"></div>
       <div class="rail-gap"></div>
-      <button class="cbtn" data-cat="auto" onclick="selCat(this)"><span class="cico">&#9889;</span><span class="clbl">Auto</span></button>
+      <button class="cbtn" data-cat="auto" onclick="selCat(this)"
+        title="Auto-mode: each group/component is assigned a pattern automatically based on height and entity type. Groups >24m → Skyscraper pool, ≤24m → TierBuilding. Components >24m → Apartment, ≤24m → Villa.">
+        <span class="cico">&#9889;</span><span class="clbl">Auto</span></button>
     </nav>
     <div id="pane">
-      <div id="gwrap"><div id="grid"></div></div>
-      <div id="applyrow">
-        <div id="sel-chips-wrap">
-          <div id="sel-chips"></div>
-          <span id="no-sel-hint" class="no-sel-hint"></span>
+      <div id="pane-inner">
+        <div id="gwrap"><div id="grid"></div></div>
+        <div id="applyrow">
+          <div id="sel-chips-wrap">
+            <div id="sel-chips"></div>
+            <span id="no-sel-hint" class="no-sel-hint"></span>
+          </div>
+          <button class="apply-action-btn" onclick="selectAll()" title="Select all patterns in current category">Select All</button>
+          <button class="apply-action-btn" onclick="randomizeSelection()" title="Pick a random pattern from the current category">&#127922; Random</button>
+          <button id="nodtlbtn" class="apply-action-btn" onclick="toggleNoDetail()" title="Strip all detail lines when applying">No Detail</button>
         </div>
-        <button id="nodtlbtn" class="toggle-btn" onclick="toggleNoDetail()" title="Strip all detail lines when applying">No Detail</button>
+      </div>
+      <div id="mgr-preview" class="hidden">
+        <div id="mgr-preview-top">
+          <div id="mgr-preview-label"></div>
+          <div id="mgr-rot-btns">
+            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+3)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate left">&#9664;</button>
+            <button class="mgr-rot-btn" onclick="mgrCanvasRot=(mgrCanvasRot+1)%4;drawMgrPreview(_mgrLastBlocks)" title="Rotate right">&#9654;</button>
+          </div>
+        </div>
+        <canvas id="mgr-canvas"></canvas>
       </div>
     </div>
   </div>
@@ -75,6 +91,7 @@
     </div>
     <div id="inspector"><p class="no-sel">Select a block to edit</p></div>
     <div id="canvas-area">
+      <div id="canvas-resize-handle" id="cvs-drag"></div>
       <canvas id="iso-canvas"></canvas>
       <div id="canvas-ctrl">
         <div id="canvas-ctrl-row">
@@ -129,7 +146,15 @@
       <tr><td>lv(t, 3.5)</td><td>Floor count = target height ÷ 3.5 m per floor</td></tr>
       <tr><td>w, d, h, x, y, z…</td><td>Resolved value of another field in this block</td></tr>
     </table>
-    <p class="htxt">Examples: <code>"lv(t,3.5)*3"</code> &nbsp;·&nbsp; <code>"r1*10+20"</code> &nbsp;·&nbsp; <code>"70+r4*4"</code> &nbsp;·&nbsp; <code>"rand(4)*5"</code></p>
+    <p class="htxt">Examples:</p>
+    <table class="htbl">
+      <tr><td>"lv(t,3.5)*3"</td><td><abbr title="lv(t,3.5) = floor count (target height ÷ 3.5 m per floor) · * = multiply · 3 = three times the floor count">floor count × 3 — scales with building height</abbr></td></tr>
+      <tr><td>"r1*10+20"</td><td><abbr title="r1 = random bit, 0 or 1 per building · *10 = multiply by 10 · +20 = add base offset → result is 20 or 30">randomly 20 or 30 per building</abbr></td></tr>
+      <tr><td>"70+r4*4"</td><td><abbr title="70 = base value · r4 = independent random bit · *4 = multiply · → result is 70 or 74">randomly 70 or 74, independent of r1–r3</abbr></td></tr>
+      <tr><td>"rand(4)*5"</td><td><abbr title="rand(4) = random integer 0, 1, 2, or 3 · *5 = multiply → result is 0, 5, 10, or 15">one of four evenly-spaced values</abbr></td></tr>
+      <tr><td>"lv(t,3)+r2*2"</td><td><abbr title="lv(t,3) = floor count (3 m floors) · r2 = random bit · *2 = adds 0 or 2 → floor count with random ±2 variation">floor count with random 2-unit variation</abbr></td></tr>
+      <tr><td>"w*0.5"</td><td><abbr title="w = resolved width of this block · *0.5 = half of it → makes this field exactly half the block width">half of this block's own width</abbr></td></tr>
+    </table>
     <p class="htxt">Use <b>fx</b> on any field to switch it to expression mode.</p>
 
     <div class="hsec">Canvas Controls</div>
@@ -283,15 +308,7 @@ function renderGrid() {
   var g = document.getElementById('grid');
   g.innerHTML = '';
   if (selCatName === 'auto') {
-    g.innerHTML = '<div class="auto-info"><div class="auto-ico">⚡</div>'
-      +'<div class="auto-ttl">Auto-Select by Height &amp; Type</div>'
-      +'<div class="auto-dsc">Each group or component is assigned a pattern automatically based on its height and entity type:</div>'
-      +'<table class="atbl"><tr><th>Type</th><th>Height</th><th>Pool</th></tr>'
-      +'<tr><td>Group</td><td>&gt;24m</td><td>Skyscraper</td></tr>'
-      +'<tr><td>Group</td><td>≤24m</td><td>TierBuilding</td></tr>'
-      +'<tr><td>Component</td><td>&gt;24m</td><td>Apartment</td></tr>'
-      +'<tr><td>Component</td><td>≤24m</td><td>Villa</td></tr></table>'
-      +'<div class="auto-note">A random pattern is picked from the matching pool each time you generate.</div></div>';
+    g.innerHTML = '<p class="empty-msg">⚡ Auto mode — hover the Auto button for details</p>';
     selKeys = []; updateSummary(); return;
   }
   var pool = patterns[selCatName] || {};
@@ -333,12 +350,12 @@ function updateSummary() {
   var hintEl  = document.getElementById('no-sel-hint');
   chipsEl.innerHTML = '';
   if (selCatName === 'auto') {
-    hintEl.textContent = '⚡ Auto-select active — Transform All picks randomly';
-    return;
+    hintEl.textContent = '⚡ Auto-select active';
+    hideMgrPreview(); return;
   }
   if (!selKeys.length) {
-    hintEl.textContent = 'No patterns selected — click cards above to select';
-    return;
+    hintEl.textContent = 'No patterns selected — click cards to select';
+    hideMgrPreview(); return;
   }
   hintEl.textContent = '';
   selKeys.forEach(function(s) {
@@ -359,6 +376,150 @@ function updateSummary() {
   clrBtn.textContent = 'Clear all';
   clrBtn.onclick = clearSel;
   chipsEl.appendChild(clrBtn);
+  // Show manager preview for the last selected pattern
+  showMgrPreview();
+}
+
+function selectAll() {
+  if (selCatName === 'auto') return;
+  var pool = patterns[selCatName] || {};
+  selKeys = Object.keys(pool).map(function(k){ return {category:selCatName, pattern:k}; });
+  syncSelectionToRuby(); renderGrid(); updateSummary();
+}
+
+function randomizeSelection() {
+  if (selCatName === 'auto') return;
+  var pool = patterns[selCatName] || {};
+  var keys = Object.keys(pool);
+  if (!keys.length) return;
+  var pick = keys[Math.floor(Math.random()*keys.length)];
+  selKeys = [{category:selCatName, pattern:pick}];
+  syncSelectionToRuby(); renderGrid(); updateSummary();
+}
+
+var mgrCanvas=null, mgrCtx=null, mgrCanvasRot=0, _mgrLastBlocks=[];
+function showMgrPreview() {
+  if (!selKeys.length) { hideMgrPreview(); return; }
+  var last = selKeys[selKeys.length-1];
+  var blocks = (patterns[last.category]||{})[last.pattern];
+  if (!blocks || !blocks.length) { hideMgrPreview(); return; }
+  var panel = document.getElementById('mgr-preview');
+  panel.classList.remove('hidden');
+  document.getElementById('mgr-preview-label').textContent = last.pattern + ' · ' + last.category;
+  if (!mgrCanvas) {
+    mgrCanvas = document.getElementById('mgr-canvas');
+    mgrCtx = mgrCanvas.getContext('2d');
+  }
+  var rect = mgrCanvas.getBoundingClientRect();
+  var dpr = window.devicePixelRatio||1;
+  var cw = Math.round(rect.width*dpr), ch = Math.round(rect.height*dpr);
+  if (cw>4) mgrCanvas.width=cw;
+  if (ch>4) mgrCanvas.height=ch;
+  _mgrLastBlocks = blocks.map(arrToBlock);
+  drawMgrPreview(_mgrLastBlocks);
+}
+
+function hideMgrPreview() {
+  var panel = document.getElementById('mgr-preview');
+  if (panel) panel.classList.add('hidden');
+  _mgrLastBlocks = [];
+}
+
+function mgrRotateNorm(bl) {
+  var x=bl.x,y=bl.y,w=bl.w,d=bl.d;
+  if(mgrCanvasRot===1) return Object.assign({},bl,{x:y,     y:1-x-w, w:d,d:w});
+  if(mgrCanvasRot===2) return Object.assign({},bl,{x:1-x-w, y:1-y-d, w:w,d:d});
+  if(mgrCanvasRot===3) return Object.assign({},bl,{x:1-y-d, y:x,     w:d,d:w});
+  return bl;
+}
+
+function drawMgrPreview(blks) {
+  if (!mgrCanvas||!mgrCtx||!blks||!blks.length) return;
+  var W=mgrCanvas.width, H=mgrCanvas.height;
+  if (!W||!H) return;
+  var dpr=window.devicePixelRatio||1;
+  var ph=10, rv=[1,0,1,0,1,0];
+  var EKEYS=['x','y','z','w','d','h','seg','offset'];
+  var solved=blks.map(function(b){
+    var p1={}; EKEYS.forEach(function(k){p1[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,null,rv[3],rv[4],rv[5]);});
+    var p2={}; EKEYS.forEach(function(k){p2[k]=evalExpr(b[k],rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]);});
+    return{x:p2.x||0,y:p2.y||0,z:p2.z||0,
+           w:Math.max(0.001,p2.w||1),d:Math.max(0.001,p2.d||1),h:Math.max(0.001,p2.h||1),
+           mat:b.mat,detail:b.detail||0,face:Math.round(evalExpr(b.face,rv[0],rv[1],rv[2],ph,p1,rv[3],rv[4],rv[5]))||0,
+           seg:Math.max(2,parseInt(p2.seg)||6)};
+  });
+  var maxX=0.001,maxY=0.001,maxZ=0.001;
+  solved.forEach(function(b){maxX=Math.max(maxX,b.x+b.w);maxY=Math.max(maxY,b.y+b.d);maxZ=Math.max(maxZ,b.z+b.h);});
+  var norm=solved.map(function(b){
+    return mgrRotateNorm({x:b.x/maxX,y:b.y/maxY,z:b.z/maxZ,
+      w:b.w/maxX,d:b.d/maxY,h:b.h/maxZ,mat:b.mat,detail:b.detail,face:b.face,seg:b.seg});
+  });
+  var pad=10*dpr, S=Math.min((W-pad*2)/1.732,(H-pad*2)/2);
+  var cx=W*0.5, cy=H*0.5;
+  function ip(x,y,z){return{x:cx+(x-y)*S*0.866,y:cy+(x+y)*S*0.5-z*S};}
+  var imgData=mgrCtx.createImageData(W,H);
+  var px=imgData.data;
+  for(var i=0;i<W*H;i++){px[i*4]=240;px[i*4+1]=244;px[i*4+2]=248;px[i*4+3]=255;}
+  var depthBuf=new Float32Array(W*H).fill(-1e9);
+  var idBuf2=new Int32Array(W*H).fill(-1);
+  function rf(c0,c1,c3,r,g,b2,bi){
+    var sp0=ip(c0[0],c0[1],c0[2]),sp1=ip(c1[0],c1[1],c1[2]),sp3=ip(c3[0],c3[1],c3[2]);
+    var d0=c0[0]+c0[1]+c0[2],d1=c1[0]+c1[1]+c1[2],d3=c3[0]+c3[1]+c3[2];
+    var ax=sp1.x-sp0.x,ay=sp1.y-sp0.y,bx=sp3.x-sp0.x,by=sp3.y-sp0.y;
+    var det=ax*by-ay*bx; if(Math.abs(det)<0.0001)return; var inv=1/det;
+    var sp2x=sp1.x+bx,sp2y=sp1.y+by;
+    var mnX=Math.max(0,Math.floor(Math.min(sp0.x,sp1.x,sp2x,sp3.x)));
+    var mxX=Math.min(W-1,Math.ceil(Math.max(sp0.x,sp1.x,sp2x,sp3.x)));
+    var mnY=Math.max(0,Math.floor(Math.min(sp0.y,sp1.y,sp2y,sp3.y)));
+    var mxY=Math.min(H-1,Math.ceil(Math.max(sp0.y,sp1.y,sp2y,sp3.y)));
+    for(var py2=mnY;py2<=mxY;py2++){for(var px2=mnX;px2<=mxX;px2++){
+      var ex=px2-sp0.x,ey=py2-sp0.y;
+      var u=(ex*by-ey*bx)*inv,v=(ax*ey-ay*ex)*inv;
+      if(u<-0.01||u>1.01||v<-0.01||v>1.01)continue;
+      var depth=d0+u*(d1-d0)+v*(d3-d0),idx=py2*W+px2;
+      if(depth>depthBuf[idx]){depthBuf[idx]=depth;idBuf2[idx]=bi;var pi4=idx*4;px[pi4]=r;px[pi4+1]=g;px[pi4+2]=b2;px[pi4+3]=255;}
+    }}
+  }
+  function sc(rgb,f){return[Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];}
+  norm.forEach(function(bl,bi){
+    var rgb=edClrs[bl.mat]?hexToRgb(edClrs[bl.mat]):[100,120,140];
+    var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
+    var cf=sc(rgb,0.62),cr=sc(rgb,0.78),ct=sc(rgb,1.0);
+    rf([x,y+d,z],[x+w,y+d,z],[x,y+d,z+h],cf[0],cf[1],cf[2],bi);
+    rf([x+w,y,z],[x+w,y+d,z],[x+w,y,z+h],cr[0],cr[1],cr[2],bi);
+    rf([x,y,z+h],[x+w,y,z+h],[x,y+d,z+h],ct[0],ct[1],ct[2],bi);
+  });
+  mgrCtx.putImageData(imgData,0,0);
+  function faceOwned2(fcx,fcy,bi){var px2=Math.round(fcx),py2=Math.round(fcy);if(px2<0||px2>=W||py2<0||py2>=H)return false;return idBuf2[py2*W+px2]===bi;}
+  function sp2(pts,lw){mgrCtx.lineWidth=lw;mgrCtx.beginPath();mgrCtx.moveTo(pts[0].x,pts[0].y);for(var i=1;i<pts.length;i++)mgrCtx.lineTo(pts[i].x,pts[i].y);mgrCtx.closePath();mgrCtx.stroke();}
+  function pp(px2,py2,pz2){return ip(px2,py2,pz2);}
+  norm.forEach(function(bl,bi){
+    var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
+    var fcFront=ip(x+w/2,y+d,z+h/2), fcRight=ip(x+w,y+d/2,z+h/2), fcTop=ip(x+w/2,y+d/2,z+h);
+    var visF=faceOwned2(fcFront.x,fcFront.y,bi);
+    var visR=faceOwned2(fcRight.x,fcRight.y,bi);
+    var visT=faceOwned2(fcTop.x,fcTop.y,bi);
+    mgrCtx.strokeStyle='rgba(0,0,0,0.13)';
+    if(visF) sp2([pp(x,y+d,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
+    if(visR) sp2([pp(x+w,y,z),pp(x+w,y+d,z),pp(x+w,y+d,z+h),pp(x+w,y,z+h)],0.5*dpr);
+    if(visT) sp2([pp(x,y,z+h),pp(x+w,y,z+h),pp(x+w,y+d,z+h),pp(x,y+d,z+h)],0.5*dpr);
+    // Detail lines
+    if(bl.detail!==0&&bl.seg>1){
+      mgrCtx.strokeStyle='rgba(0,0,0,0.22)'; mgrCtx.lineWidth=0.5*dpr;
+      var n=bl.seg;
+      for(var s=1;s<n;s++){
+        if(bl.detail===1){
+          var fz=z+h*s/n;
+          if(visF){mgrCtx.beginPath();var l=pp(x,y+d,fz),rr=pp(x+w,y+d,fz);mgrCtx.moveTo(l.x,l.y);mgrCtx.lineTo(rr.x,rr.y);mgrCtx.stroke();}
+          if(visR){mgrCtx.beginPath();l=pp(x+w,y,fz);rr=pp(x+w,y+d,fz);mgrCtx.moveTo(l.x,l.y);mgrCtx.lineTo(rr.x,rr.y);mgrCtx.stroke();}
+        } else {
+          var fx=x+w*s/n, fy=y+d*s/n;
+          if(visF){mgrCtx.beginPath();var a2=pp(fx,y+d,z),b3=pp(fx,y+d,z+h);mgrCtx.moveTo(a2.x,a2.y);mgrCtx.lineTo(b3.x,b3.y);mgrCtx.stroke();}
+          if(visR){mgrCtx.beginPath();a2=pp(x+w,fy,z);b3=pp(x+w,fy,z+h);mgrCtx.moveTo(a2.x,a2.y);mgrCtx.lineTo(b3.x,b3.y);mgrCtx.stroke();}
+        }
+      }
+    }
+  });
 }
 
 function deselectPattern(cat, key) {
@@ -1063,6 +1224,11 @@ function savePattern(){
   var name=document.getElementById('ptn-name').value.trim();
   if(!name){document.getElementById('ptn-name').focus();return;}
   var cat=document.getElementById('ptn-cat').value;
+  // Overwrite protection: warn if pattern name already exists in any loaded file
+  var exists = patterns[cat] && patterns[cat][name];
+  if(exists){
+    if(!confirm('Pattern "'+name+'" already exists in category "'+cat+'".\nOverwrite it?')) return;
+  }
   var blocks=edBlocks.map(blockToArr);
   var content={CLRS:edClrs,PTNS:{}};
   content.PTNS[cat]={};content.PTNS[cat][name]=blocks;
@@ -1075,6 +1241,33 @@ function exportMgz(){
   var blocks=edBlocks.map(blockToArr);
   su('exportMgz', JSON.stringify({name:name,cat:cat,blocks:blocks,clrs:edClrs}));
 }
+
+// ── Canvas resize handle ──────────────────────────────
+(function(){
+  var handle = document.getElementById('canvas-resize-handle');
+  if (!handle) return;
+  var area, startX, startW;
+  handle.addEventListener('mousedown', function(e){
+    area = document.getElementById('canvas-area');
+    startX = e.clientX;
+    startW = area.offsetWidth;
+    handle.classList.add('dragging');
+    e.preventDefault();
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e){
+    var dx = startX - e.clientX; // dragging left edge rightward shrinks canvas
+    var nw = Math.max(140, Math.min(420, startW + dx));
+    area.style.width = nw + 'px';
+    if (canvas) drawISO();
+  }
+  function onUp(){
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Init ──────────────────────────────────────────────
 window.onload = function(){ initPatterns(); };

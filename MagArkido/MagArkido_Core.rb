@@ -100,15 +100,33 @@ module MagArkido
       c
     end
 
+    # Normals for face indices 0-5: front(Y+), back(Y-), right(X+), left(X-), top(Z+), bottom(Z-)
+    FACE_NORMALS = [
+      Geom::Vector3d.new( 0,  1, 0),
+      Geom::Vector3d.new( 0, -1, 0),
+      Geom::Vector3d.new( 1,  0, 0),
+      Geom::Vector3d.new(-1,  0, 0),
+      Geom::Vector3d.new( 0,  0, 1),
+      Geom::Vector3d.new( 0,  0,-1),
+    ].freeze
+
+    def self.find_face(g, f)
+      target = FACE_NORMALS[f] || FACE_NORMALS[0]
+      best = nil
+      g.entities.each do |e|
+        next unless e.is_a?(Sketchup::Face)
+        best = e if e.normal.samedirection?(target)
+      end
+      best
+    end
+
     def self.dv1(g, f, n, s = 0)
-      fs, ps = [], []
-      g.entities.each { |e| fs << e if e.is_a?(Sketchup::Face) }
-      return if fs.empty? || fs[f].nil?
-      vs = fs[f].vertices
-      vs.each { |v| ps << v.position }
-      eg = vs[0].edges - fs[f].edges
+      face = find_face(g, f)
+      return unless face
+      ps = face.vertices.map(&:position)
+      eg = face.vertices[0].edges - face.edges
       return if eg.empty?
-      vt = fs[f].normal.reverse
+      vt = face.normal.reverse
       vt.length = eg[0].length / n
       (1...n - s).each do |i|
         ps.map! { |p| p += vt }
@@ -117,20 +135,19 @@ module MagArkido
     end
 
     def self.dv2(g, f, n, s = 0)
-      fs, ps = [], []
-      g.entities.each { |e| fs << e if e.is_a?(Sketchup::Face) }
-      return if fs.empty? || fs[f].nil?
-      fs[f].edges.each do |e|
+      face = find_face(g, f)
+      return unless face
+      ps = []
+      face.edges.each do |e|
         p, vt = e.start.position, e.line[1]
         vt.length = e.length / n
         (1...n - s).each { |i| p += vt; ps << p if i > s }
       end
-      perp = fs[f].vertices[0].edges - fs[f].edges
+      perp = face.vertices[0].edges - face.edges
       return if perp.empty?
-      vt = fs[f].normal.reverse
+      vt = face.normal.reverse
       vt.length = perp[0].length
-      li = ps.map { |p| [p, p + vt] }
-      li.each { |l| g.entities.add_edges l }
+      ps.map { |p| [p, p + vt] }.each { |l| g.entities.add_edges l }
     end
 
     def self.lv(t, m)
