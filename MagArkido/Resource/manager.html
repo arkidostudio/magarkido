@@ -15,19 +15,32 @@
     <span id="tsub">v0.5.0</span>
     <button class="hbtn" onclick="su('importMgzSession')" title="Load a .mgz file into this session">&#128194; Load .mgz</button>
     <button class="hbtn" onclick="newPattern()" title="New pattern">&#43; New</button>
-    <button class="hbtn" onclick="openEditor()" title="Edit selected pattern">&#9998;</button>
+    <button class="hbtn" id="edit-ptn-btn" onclick="openEditor()" title="Edit selected pattern" disabled>&#9998; Edit Pattern</button>
     <button class="hbtn danger-btn" onclick="deleteSel()" title="Delete selected objects from model">&#128465; Delete</button>
   </header>
+
+  <!-- Loaded files bar -->
+  <div id="filesbar">
+    <span class="files-lbl">Loaded:</span>
+    <div id="file-chips"></div>
+    <span class="files-empty hidden" id="files-empty">No files loaded — use Load .mgz above</span>
+  </div>
+
   <div id="body">
     <nav id="rail">
       <div id="rail-cats"></div>
       <div class="rail-gap"></div>
-      <button class="cbtn" data-cat="auto" onclick="selCat(this)"><span class="cico">⚡</span><span class="clbl">Auto</span></button>
+      <button class="cbtn" data-cat="auto" onclick="selCat(this)"><span class="cico">&#9889;</span><span class="clbl">Auto</span></button>
     </nav>
     <div id="pane">
       <div id="gwrap"><div id="grid"></div></div>
-      <div id="selsum" class="hidden"><button class="clear-sel-btn" onclick="clearSel()" title="Deselect all">&#10005;</button><span id="selsum-txt"></span></div>
-      <div id="applyrow"><button id="applybtn" onclick="applyPtn()">Apply to Selection</button></div>
+      <div id="applyrow">
+        <div id="sel-chips-wrap">
+          <div id="sel-chips"></div>
+          <span id="no-sel-hint" class="no-sel-hint"></span>
+        </div>
+        <button id="nodtlbtn" class="toggle-btn" onclick="toggleNoDetail()" title="Strip all detail lines when applying">No Detail</button>
+      </div>
     </div>
   </div>
 </div>
@@ -38,31 +51,38 @@
   <div id="edtop">
     <input type="text" id="ptn-name" placeholder="Pattern name">
     <select id="ptn-cat" onchange="onCatChange(this)"></select>
+    <select id="ptn-sel" onchange="switchToPattern(this.value)" title="Switch pattern"></select>
+    <span id="src-file-badge" class="src-file"></span>
     <button class="undo-btn" id="undo-btn" onclick="undoEditor()" title="Undo last change" disabled>&#8617;</button>
-    <button class="absorb-ed-btn" onclick="su('absorb')" title="Absorb selected group's sub-groups into this pattern">&#9673; Absorb</button>
-    <button class="test-btn" id="test-btn" onclick="testPattern()">&#9654; Test</button>
-    <button class="saveas-btn" onclick="saveAsNew()" title="Save under a new name">Save As</button>
+    <button class="absorb-ed-btn" onclick="su('absorb')" title="Absorb selected group's sub-groups">&#9673; Absorb</button>
     <button class="save-btn" onclick="savePattern()">Save</button>
+    <button class="export-btn" onclick="exportMgz()" title="Export as .mgz file to a chosen location">&#8595; Export</button>
     <button class="x-btn" onclick="closeEditor()">&#10005;</button>
   </div>
 
   <div id="edbody">
     <div id="blocklist">
       <div id="blitems"></div>
-      <button id="bladd" onclick="addBlock()">+ Add Block</button>
+      <div id="blbtns">
+        <button id="bladd" onclick="addBlock()">+ Add Block</button>
+        <button id="bldup" onclick="duplicateBlock()">&#10697; Duplicate</button>
+        <div id="blmove">
+          <button id="blup" onclick="moveBlock(-1)" title="Move block up">&#8593; Up</button>
+          <button id="bldown" onclick="moveBlock(1)" title="Move block down">&#8595; Down</button>
+        </div>
+      </div>
     </div>
     <div id="inspector"><p class="no-sel">Select a block to edit</p></div>
     <div id="canvas-area">
       <canvas id="iso-canvas"></canvas>
       <div id="canvas-ctrl">
-        <span class="cctrl-lbl">Target height (lv)</span>
-        <input type="range" id="prevh-slider" min="3" max="100" value="10"
-               oninput="document.getElementById('prevh-val').textContent=this.value+'m';drawISO()">
-        <span id="prevh-val">10m</span>
-        <button class="rand-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">&#9664;</button>
-        <button class="rand-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">&#9654;</button>
-        <button class="rand-btn" onclick="randomize()">&#127922; Randomize</button>
-        <button class="rand-btn" onclick="drawISO()" title="Redraw canvas">&#8635; Refresh</button>
+        <div id="canvas-ctrl-row">
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">&#9664;</button>
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">&#9654;</button>
+          <button class="rand-btn" onclick="randomize()">&#127922; Rnd</button>
+          <button class="rand-btn" onclick="drawISO()" title="Redraw canvas">&#8635;</button>
+          <button class="rand-btn test-btn" id="test-btn" onclick="testPattern()">&#9654; Test</button>
+        </div>
       </div>
     </div>
   </div>
@@ -90,17 +110,83 @@ function su(fn, arg) {
   catch(e){ console.warn('su:',fn,e); }
 }
 
-// ── Pattern data (injected by Ruby into window.magarkidoPatterns) ─
+// ── Session state ─────────────────────────────────────
 var patterns = {};
+var loadedFiles = []; // [{name, path, clrs, ptns}]
+var edClrs = {};      // current material palette for the editor
+
+// Normalise CLRS values to hex strings (source files may use integers)
+function normalizeClrs(clrs) {
+  var result = {};
+  Object.keys(clrs || {}).forEach(function(k) {
+    var v = clrs[k];
+    if (typeof v === 'number') {
+      result[k] = '#' + ('000000' + (v & 0xFFFFFF).toString(16)).slice(-6);
+    } else if (typeof v === 'string') {
+      result[k] = v.charAt(0) === '#' ? v : '#' + v;
+    }
+  });
+  return result;
+}
+
 function initPatterns() {
   patterns = window.magarkidoPatterns || {};
+  loadedFiles = window.magarkidoFiles || [];
+  edClrs = normalizeClrs(window.magarkidoClrs || {});
+  if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+  renderFiles();
   renderNav();
   renderGrid();
+  updateEditBtn();
+}
+
+// ── Loaded files bar ──────────────────────────────────
+function renderFiles() {
+  var el = document.getElementById('file-chips');
+  var empty = document.getElementById('files-empty');
+  el.innerHTML = '';
+  if (!loadedFiles.length) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  loadedFiles.forEach(function(f) {
+    var chip = document.createElement('div');
+    chip.className = 'file-chip';
+    var name = document.createElement('span');
+    name.className = 'file-chip-name';
+    name.title = f.path;
+    name.textContent = f.name;
+    var xBtn = document.createElement('button');
+    xBtn.className = 'file-chip-x';
+    xBtn.title = 'Remove from session';
+    xBtn.textContent = '×';
+    xBtn.addEventListener('click', (function(p){ return function(){ offloadFile(p); }; })(f.path));
+    chip.appendChild(name);
+    chip.appendChild(xBtn);
+    el.appendChild(chip);
+  });
+}
+
+function offloadFile(path) {
+  su('offloadFile', JSON.stringify(path));
+}
+
+// ── Refresh all (called after load / offload / save) ──
+function refreshAll(newPtns, newFiles, newClrs) {
+  patterns = newPtns;
+  loadedFiles = newFiles;
+  edClrs = normalizeClrs(newClrs || {});
+  if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+  renderFiles();
+  renderNav();
+  renderGrid();
+  updateEditBtn();
+  closeEditor();
 }
 
 // ── Main view ─────────────────────────────────────────
 var selCatName = 'auto', selKeys = [];
-
 var CAT_ICONS = {Skyscraper:'🏙',TierBuilding:'🏢',Apartment:'🏬',Villa:'🏡'};
 
 function renderNav() {
@@ -115,23 +201,22 @@ function renderNav() {
     btn.innerHTML = '<span class="cico">'+ico+'</span><span class="clbl">'+cat+'</span>';
     container.appendChild(btn);
   });
-  // If current category no longer exists in patterns, reset to auto
   if (selCatName !== 'auto' && !patterns[selCatName]) {
     selCatName = 'auto';
     document.querySelectorAll('.cbtn').forEach(function(b){
       b.classList.toggle('active', b.dataset.cat === 'auto');
     });
   }
-  // Populate editor category dropdown
   var sel = document.getElementById('ptn-cat');
   var prev = sel.value;
   sel.innerHTML = Object.keys(patterns).map(function(c){
     return '<option'+(c===prev?' selected':'')+'>'+c+'</option>';
   }).join('') + '<option value="__new__">＋ New category…</option>';
+  refreshPtnSel();
 }
 
 function onCatChange(sel) {
-  if (sel.value !== '__new__') return;
+  if (sel.value !== '__new__') { refreshPtnSel(); return; }
   var name = (prompt('New category name:') || '').trim();
   if (name) {
     patterns[name] = patterns[name] || {};
@@ -140,6 +225,7 @@ function onCatChange(sel) {
   } else {
     sel.value = Object.keys(patterns)[0] || '';
   }
+  refreshPtnSel();
 }
 
 function selCat(btn) {
@@ -147,6 +233,14 @@ function selCat(btn) {
   btn.classList.add('active');
   selCatName = btn.dataset.cat;
   renderGrid();
+  updateEditBtn();
+}
+
+function updateEditBtn() {
+  var btn = document.getElementById('edit-ptn-btn');
+  if (!btn) return;
+  var canEdit = selCatName !== 'auto' && Object.keys(patterns[selCatName] || {}).length > 0;
+  btn.disabled = !canEdit;
 }
 
 function renderGrid() {
@@ -190,31 +284,76 @@ function toggleCard(cat, key, card) {
   if (idx>=0) { selKeys.splice(idx,1); card.classList.remove('sel'); var c=card.querySelector('.chk');if(c)c.remove(); }
   else { selKeys.push({category:cat,pattern:key}); card.classList.add('sel'); var chk=document.createElement('div');chk.className='chk';chk.textContent='✓';card.insertBefore(chk,card.firstChild); }
   updateSummary();
+  syncSelectionToRuby();
+}
+
+function syncSelectionToRuby() {
+  var data = { patterns: selCatName==='auto' ? [] : selKeys };
+  su('applyPattern', JSON.stringify(data));
 }
 
 function updateSummary() {
-  var s=document.getElementById('selsum'), t=document.getElementById('selsum-txt'), b=document.getElementById('applybtn');
-  if (selCatName==='auto') { s.classList.add('hidden');b.textContent='Apply — Auto Select';return; }
-  if (!selKeys.length) { s.classList.add('hidden');b.textContent='Apply to Selection';return; }
-  var gr={};selKeys.forEach(function(k){gr[k.category]=gr[k.category]||[];gr[k.category].push(k.pattern);});
-  t.innerHTML=Object.keys(gr).map(function(c){return gr[c].join(', ')+' <span class="sum-cat">('+c+')</span>';}).join(' + ');
-  s.classList.remove('hidden');
-  b.textContent='Apply — '+selKeys.length+' pattern'+(selKeys.length>1?'s':'');
+  var chipsEl = document.getElementById('sel-chips');
+  var hintEl  = document.getElementById('no-sel-hint');
+  chipsEl.innerHTML = '';
+  if (selCatName === 'auto') {
+    hintEl.textContent = '⚡ Auto-select active — Transform All picks randomly';
+    return;
+  }
+  if (!selKeys.length) {
+    hintEl.textContent = 'No patterns selected — click cards above to select';
+    return;
+  }
+  hintEl.textContent = '';
+  selKeys.forEach(function(s) {
+    var chip = document.createElement('div');
+    chip.className = 'sel-chip';
+    chip.innerHTML = '<span>' + s.pattern + ' <span class="sum-cat">(' + s.category + ')</span></span>';
+    var x = document.createElement('button');
+    x.className = 'sel-chip-x';
+    x.textContent = '×';
+    x.title = 'Deselect';
+    x.addEventListener('click', (function(cat, key){ return function(){ deselectPattern(cat, key); }; })(s.category, s.pattern));
+    chip.appendChild(x);
+    chipsEl.appendChild(chip);
+  });
+  // Clear all button
+  var clrBtn = document.createElement('button');
+  clrBtn.className = 'sel-clear-btn';
+  clrBtn.textContent = 'Clear all';
+  clrBtn.onclick = clearSel;
+  chipsEl.appendChild(clrBtn);
 }
 
-function clearSel() { selKeys=[]; renderGrid(); updateSummary(); }
+function deselectPattern(cat, key) {
+  selKeys = selKeys.filter(function(s){ return !(s.category===cat && s.pattern===key); });
+  syncSelectionToRuby();
+  renderGrid();
+  updateSummary();
+}
+
+function clearSel() { selKeys=[]; syncSelectionToRuby(); renderGrid(); updateSummary(); }
+
+var noDetail = false;
+function toggleNoDetail() {
+  noDetail = !noDetail;
+  var btn = document.getElementById('nodtlbtn');
+  btn.classList.toggle('active', noDetail);
+  su('setNoDetail', JSON.stringify(noDetail));
+}
 
 function applyPtn() {
   var data = { patterns: selCatName==='auto' ? [] : selKeys };
   su('applyPattern', JSON.stringify(data));
   var btn=document.getElementById('applybtn'),orig=btn.textContent;
-  btn.classList.add('ok'); btn.textContent='Applying…';
+  btn.classList.add('ok'); btn.textContent='✓ Confirmed';
   setTimeout(function(){btn.classList.remove('ok');btn.textContent=orig;},1400);
 }
 
 // ── Editor state ──────────────────────────────────────
 var edBlocks = [], selBlockIdx = -1, edHistory = [];
 var r1=1, r2=0, r3=1;
+var edSourceFile = ''; // name of the .mgz file the current pattern came from
 
 function pushHistory() {
   edHistory.push(JSON.stringify(edBlocks));
@@ -231,41 +370,93 @@ function updateUndoBtn() {
   var btn = document.getElementById('undo-btn');
   if (btn) btn.disabled = edHistory.length === 0;
 }
+
 var KEYS = ['x','y','z','w','d','h','mat','detail','face','seg','offset'];
 var EXPR_KEYS = ['x','y','z','w','d','h','seg','offset'];
-var MAT_COLORS = {BDY:'#5B85A8',TOP:'#A8906B',BTM:'#7A8A96',SLD:'#4E5E6E'};
-var MAT_BASE   = {BDY:[91,133,168],TOP:[168,144,107],BTM:[122,138,150],SLD:[78,94,110]};
+var _blockIdCounter = 1;
 
 function arrToBlock(a) {
   var b = {};
   if (Array.isArray(a)) {
     KEYS.forEach(function(k,i){ b[k] = a[i]; });
   } else {
-    // named-key object format {x:0, y:0, w:9, ...}
     KEYS.forEach(function(k){ b[k] = a[k]; });
   }
   b._expr = {};
   EXPR_KEYS.forEach(function(k){
     b._expr[k] = typeof b[k]==='string' && isNaN(parseFloat(b[k]));
   });
+  if (!b._id) b._id = _blockIdCounter++;
   return b;
 }
 function blockToArr(b) { return KEYS.map(function(k){return b[k];}); }
 
 function makeDefault() {
-  return {x:0,y:0,z:0,w:40,d:40,h:20,mat:'BDY',detail:0,face:0,seg:6,offset:0,_expr:{}};
+  var firstMat = Object.keys(edClrs)[0] || 'BDY';
+  return {x:0,y:0,z:0,w:40,d:40,h:20,mat:firstMat,detail:0,face:0,seg:6,offset:0,_expr:{},_id:_blockIdCounter++};
+}
+
+// Find which loaded file a pattern belongs to
+function findSourceFile(cat, key) {
+  for (var i = 0; i < loadedFiles.length; i++) {
+    var f = loadedFiles[i];
+    if (f.ptns && f.ptns[cat] && f.ptns[cat][key] !== undefined) return f.name;
+  }
+  return '';
+}
+
+function refreshPtnSel() {
+  var catSel = document.getElementById('ptn-cat');
+  var ptnSel = document.getElementById('ptn-sel');
+  if (!catSel || !ptnSel) return;
+  var cat = catSel.value;
+  var pool = patterns[cat] || {};
+  var keys = Object.keys(pool);
+  ptnSel.innerHTML = keys.map(function(k){
+    return '<option value="'+k+'">'+k+'</option>';
+  }).join('');
+  if (!keys.length) ptnSel.innerHTML = '<option value="">— no patterns —</option>';
+}
+
+function switchToPattern(key) {
+  if (!key) return;
+  var cat = document.getElementById('ptn-cat').value;
+  var src = (patterns[cat] || {})[key];
+  if (!src) return;
+  pushHistory();
+  edBlocks = src.map(arrToBlock);
+  selBlockIdx = 0;
+  document.getElementById('ptn-name').value = key;
+  edSourceFile = findSourceFile(cat, key);
+  updateSrcBadge();
+  // Update edClrs from source file's CLRS if available
+  for (var i = 0; i < loadedFiles.length; i++) {
+    if (loadedFiles[i].name === edSourceFile && loadedFiles[i].clrs) {
+      edClrs = normalizeClrs(loadedFiles[i].clrs);
+      break;
+    }
+  }
+  renderBlockList(); renderInspector(); drawISO();
+}
+
+function updateSrcBadge() {
+  var el = document.getElementById('src-file-badge');
+  if (el) el.textContent = edSourceFile ? edSourceFile : '';
 }
 
 function newPattern() {
-  edBlocks = [{x:0,y:0,z:0,w:10,d:10,h:10,mat:'BDY',detail:0,face:0,seg:6,offset:0,_expr:{}}];
+  edBlocks = [makeDefault()];
   selBlockIdx = 0;
   edHistory = [];
+  edSourceFile = '';
   var firstCat = Object.keys(patterns)[0] || '';
   document.getElementById('ptn-name').value = '';
   document.getElementById('ptn-cat').value = firstCat;
+  refreshPtnSel();
+  updateSrcBadge();
   document.getElementById('edov').classList.remove('hidden');
   updateUndoBtn();
-  renderBlockList(); renderInspector(); setTimeout(drawISO, 50);
+  renderBlockList(); renderInspector(); drawISODeferred();
 }
 
 function receiveAbsorb(blocks, entityName) {
@@ -274,7 +465,7 @@ function receiveAbsorb(blocks, entityName) {
   selBlockIdx = 0;
   if (entityName) document.getElementById('ptn-name').value = entityName;
   updateUndoBtn();
-  renderBlockList(); renderInspector(); setTimeout(drawISO, 50);
+  renderBlockList(); renderInspector(); drawISODeferred();
 }
 
 function openEditor() {
@@ -291,11 +482,24 @@ function openEditor() {
   edBlocks = src ? src.map(arrToBlock) : [makeDefault()];
   selBlockIdx = 0;
   edHistory = [];
+  edSourceFile = sname ? findSourceFile(scat, sname) : '';
+  // Use source file's CLRS if available
+  if (edSourceFile) {
+    for (var i = 0; i < loadedFiles.length; i++) {
+      if (loadedFiles[i].name === edSourceFile && loadedFiles[i].clrs && Object.keys(loadedFiles[i].clrs).length) {
+        edClrs = normalizeClrs(loadedFiles[i].clrs);
+        break;
+      }
+    }
+  }
   document.getElementById('ptn-name').value = sname;
   document.getElementById('ptn-cat').value  = scat;
+  refreshPtnSel();
+  document.getElementById('ptn-sel').value = sname;
+  updateSrcBadge();
   document.getElementById('edov').classList.remove('hidden');
   updateUndoBtn();
-  renderBlockList(); renderInspector(); setTimeout(drawISO, 50);
+  renderBlockList(); renderInspector(); drawISODeferred();
 }
 
 function closeEditor() { document.getElementById('edov').classList.add('hidden'); }
@@ -309,6 +513,28 @@ function addBlock() {
   renderBlockList(); renderInspector(); drawISO();
 }
 
+function duplicateBlock() {
+  if (selBlockIdx < 0 || selBlockIdx >= edBlocks.length) return;
+  pushHistory();
+  var src = edBlocks[selBlockIdx];
+  var nb = JSON.parse(JSON.stringify(src));
+  edBlocks.splice(selBlockIdx + 1, 0, nb);
+  selBlockIdx = selBlockIdx + 1;
+  renderBlockList(); renderInspector(); drawISO();
+}
+
+function moveBlock(dir) {
+  if (selBlockIdx < 0) return;
+  var to = selBlockIdx + dir;
+  if (to < 0 || to >= edBlocks.length) return;
+  pushHistory();
+  var tmp = edBlocks[selBlockIdx];
+  edBlocks[selBlockIdx] = edBlocks[to];
+  edBlocks[to] = tmp;
+  selBlockIdx = to;
+  renderBlockList(); renderInspector(); drawISO();
+}
+
 function deleteBlock(idx) {
   pushHistory();
   edBlocks.splice(idx,1);
@@ -316,69 +542,113 @@ function deleteBlock(idx) {
   renderBlockList(); renderInspector(); drawISO();
 }
 
+function deletePattern(cat, key) {
+  if (!confirm('Remove pattern "' + key + '" from the session? (Does not delete the .mgz file)')) return;
+  if (patterns[cat]) delete patterns[cat][key];
+  selKeys = selKeys.filter(function(s){ return !(s.category===cat && s.pattern===key); });
+  syncSelectionToRuby();
+  su('deletePattern', JSON.stringify({cat: cat, key: key}));
+  renderNav(); renderGrid(); updateSummary();
+}
+
 function deleteSel() {
   if (!confirm('Delete the selected objects from the SketchUp model?')) return;
   su('deleteSelection');
 }
 
-function matDot(mat){return MAT_COLORS[mat]||'#888';}
+function matColor(mat){ return edClrs[mat] || '#888888'; }
 function fmtV(v){if(typeof v==='number')return v;var s=String(v);return s.length>7?s.substring(0,6)+'…':s;}
 function blockDimStr(b){return fmtV(b.w)+'×'+fmtV(b.d)+'×'+fmtV(b.h);}
 
-var dragIdx=-1;
+// ── Block list with drop indicator ───────────────────
+var dragIdx=-1, dropTgtIdx=-1, dropPos='after';
+
 function renderBlockList() {
   var el=document.getElementById('blitems'); el.innerHTML='';
   edBlocks.forEach(function(b,i){
     var chip=document.createElement('div');
     chip.className='bchip'+(i===selBlockIdx?' active':'');
     chip.draggable=true;
-    chip.innerHTML='<div class="bchip-drag">⠿</div>'
-      +'<div class="bchip-dot" style="background:'+matDot(b.mat)+'"></div>'
-      +'<div class="bchip-info"><div class="bchip-num">Block '+(i+1)+'</div>'
+    chip.dataset.idx=i;
+    chip.innerHTML='<div class="bchip-drag">&#10783;</div>'
+      +'<div class="bchip-dot" style="background:'+matColor(b.mat)+'"></div>'
+      +'<div class="bchip-info"><div class="bchip-num">Block '+b._id+'</div>'
       +'<div class="bchip-mat">'+b.mat+'</div>'
       +'<div class="bchip-dim">'+blockDimStr(b)+'</div></div>';
-    chip.onclick=function(e){if(e.target.classList.contains('bchip-drag'))return;selBlockIdx=i;renderBlockList();renderInspector();};
-    chip.addEventListener('dragstart',function(e){dragIdx=i;chip.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
-    chip.addEventListener('dragend',function(){chip.classList.remove('dragging');document.querySelectorAll('.bchip').forEach(function(c){c.classList.remove('drag-over');});});
-    chip.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';chip.classList.add('drag-over');});
-    chip.addEventListener('dragleave',function(){chip.classList.remove('drag-over');});
-    chip.addEventListener('drop',function(e){
-      e.preventDefault();chip.classList.remove('drag-over');
-      if(dragIdx<0||dragIdx===i)return;
-      pushHistory();
-      var moved=edBlocks.splice(dragIdx,1)[0];
-      var dest=dragIdx<i?i-1:i;
-      edBlocks.splice(dest,0,moved);
-      if(selBlockIdx===dragIdx)selBlockIdx=dest;
-      else if(dragIdx<i&&selBlockIdx>dragIdx&&selBlockIdx<=i)selBlockIdx--;
-      else if(dragIdx>i&&selBlockIdx<dragIdx&&selBlockIdx>=i)selBlockIdx++;
-      dragIdx=-1;
+    chip.onclick=function(e){
+      if(e.target.classList.contains('bchip-drag'))return;
+      if(selBlockIdx===i){selBlockIdx=-1;}else{selBlockIdx=i;}
       renderBlockList();renderInspector();drawISO();
+    };
+    chip.addEventListener('dragstart',function(e){
+      dragIdx=i; e.dataTransfer.setData('text/plain',String(i));
+      chip.classList.add('dragging'); e.dataTransfer.effectAllowed='move';
     });
+    chip.addEventListener('dragend',function(){
+      chip.classList.remove('dragging');
+      removeDropIndicator();
+      dragIdx=-1; dropTgtIdx=-1;
+    });
+    chip.addEventListener('dragover',function(e){
+      e.preventDefault(); e.dataTransfer.dropEffect='move';
+      var rect=chip.getBoundingClientRect();
+      dropPos=e.clientY<rect.top+rect.height/2?'before':'after';
+      dropTgtIdx=i;
+      showDropIndicator(chip, dropPos);
+    });
+    chip.addEventListener('drop',(function(myI){return function(e){
+      e.preventDefault(); removeDropIndicator();
+      var src=parseInt(e.dataTransfer.getData('text/plain'));
+      var tgt=dropTgtIdx>=0?dropTgtIdx:myI;
+      var pos=dropPos;
+      if(isNaN(src)||src===tgt){dragIdx=-1;dropTgtIdx=-1;return;}
+      pushHistory();
+      var moved=edBlocks.splice(src,1)[0];
+      var dest=pos==='before'?tgt:tgt+1;
+      if(src<dest)dest--;
+      edBlocks.splice(dest,0,moved);
+      selBlockIdx=dest;
+      dragIdx=-1; dropTgtIdx=-1;
+      renderBlockList(); renderInspector(); drawISO();
+    };})(i));
     el.appendChild(chip);
   });
 }
 
+function showDropIndicator(refChip, pos) {
+  removeDropIndicator();
+  var ind = document.createElement('div');
+  ind.className = 'drop-indicator';
+  ind.id = 'drop-ind';
+  if (pos === 'before') {
+    refChip.parentNode.insertBefore(ind, refChip);
+  } else {
+    refChip.parentNode.insertBefore(ind, refChip.nextSibling);
+  }
+}
+function removeDropIndicator() {
+  var ex = document.getElementById('drop-ind');
+  if (ex) ex.remove();
+}
+
+// ── Inspector ─────────────────────────────────────────
 function renderInspector() {
   var el=document.getElementById('inspector');
   if (selBlockIdx<0||selBlockIdx>=edBlocks.length) { el.innerHTML='<p class="no-sel">Select a block to edit</p>'; return; }
   var b=edBlocks[selBlockIdx];
   var ex=b._expr||{};
-  // Pre-resolve pass1 (lv/r1/r2/r3 only) so badges can show cross-field ref results
-  var ph2=parseFloat((document.getElementById('prevh-slider')||{}).value)||10;
+  var PREVIEW_H = 10;
   var P1KEYS=['x','y','z','w','d','h','seg','offset'];
   var p1={};
-  P1KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,ph2,null); });
+  P1KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,PREVIEW_H,null); });
   el.innerHTML=''
     +'<div class="fg"><div class="fg-head">Position</div>'
     +eRow('x',b.x,ex.x,0,80,p1)+eRow('y',b.y,ex.y,0,80,p1)+eRow('z',b.z,ex.z,0,90,p1)+'</div>'
     +'<div class="fg"><div class="fg-head">Size</div>'
     +eRow('w',b.w,ex.w,1,80,p1)+eRow('d',b.d,ex.d,1,80,p1)+eRow('h',b.h,ex.h,1,90,p1)+'</div>'
-    +'<div class="fg"><div class="fg-head">Material</div><div class="frow"><div class="mat-row">'
-    +['BDY','TOP','BTM','SLD'].map(function(m){
-      var label={BDY:'Body',TOP:'Roof',BTM:'Base',SLD:'Solid'}[m];
-      return '<button class="mchip '+m.toLowerCase()+(b.mat===m?' active':'')+'" onclick="setMat(\''+m+'\')">'+label+'</button>';
-    }).join('')+'</div></div></div>'
+    +'<div class="fg"><div class="fg-head">Material</div>'
+    +'<div class="frow mat-frow"><div class="mat-row" id="mat-row"></div>'
+    +'<button class="mat-add-btn" onclick="addMatKey()" title="Add material key">+</button></div></div>'
     +'<div class="fg"><div class="fg-head">Detail</div><div class="frow"><div class="det-row">'
     +'<button class="dchip'+(b.detail===0?' active':'')+'" onclick="setDetail(0)">None</button>'
     +'<button class="dchip'+(b.detail===1?' active':'')+'" onclick="setDetail(1)" title="Horizontal lines">&#8801;</button>'
@@ -391,17 +661,31 @@ function renderInspector() {
         +'</div></div>'+eRow('seg',b.seg,ex.seg,2,20,p1)+eRow('offset',b.offset,ex.offset,0,8,p1)+'</div>'
       :'')
     +'<button class="del-btn" onclick="deleteBlock('+selBlockIdx+')">Remove block</button>';
+  renderMatRow();
 }
 
-// p1fields: already-resolved peer values for cross-field ref display (optional)
+function renderMatRow() {
+  var el = document.getElementById('mat-row');
+  if (!el) return;
+  var b = selBlockIdx >= 0 ? edBlocks[selBlockIdx] : null;
+  el.innerHTML = Object.keys(edClrs).map(function(m) {
+    var hex = edClrs[m] || '#888888';
+    var active = b && b.mat === m;
+    return '<div class="mchip-wrap'+(active?' active':'')+'" onclick="setMat(\''+m+'\')">'
+      +'<input type="color" class="mchip-picker" value="'+hex
+      +'" onclick="event.stopPropagation()" oninput="updateMatColor(\''+m+'\',this.value)">'
+      +'<span class="mchip-lbl">'+m+'</span></div>';
+  }).join('');
+}
+
 function eRow(key,val,isExpr,mn,mx,p1fields) {
   var num=typeof val==='number'?val:parseFloat(val)||0;
   var strVal=typeof val==='string'?val:String(num);
   var clamped=Math.min(mx,Math.max(mn,num));
+  var PREVIEW_H = 10;
   var badge='';
   if(isExpr){
-    var ph=parseFloat((document.getElementById('prevh-slider')||{}).value)||10;
-    var resolved=evalExpr(val,r1,r2,r3,ph,p1fields||null);
+    var resolved=evalExpr(val,r1,r2,r3,PREVIEW_H,p1fields||null);
     var ok=typeof resolved==='number'&&isFinite(resolved)&&!isNaN(resolved);
     badge='<span class="expr-badge '+(ok?'ok':'err')+'" id="eb-'+key+'">'+(ok?('= '+(Math.round(resolved*100)/100)):'⚠ err')+'</span>';
   }
@@ -422,13 +706,12 @@ function setFieldExpr(key,val){
   if(selBlockIdx<0)return;
   var n=parseFloat(val);
   edBlocks[selBlockIdx][key]=isNaN(n)?val:n;
-  // Update badge in-place without re-rendering inspector (would kill focus)
   var badge=document.getElementById('eb-'+key);
   if(badge){
-    var ph=parseFloat((document.getElementById('prevh-slider')||{}).value)||10;
+    var PREVIEW_H=10;
     var b=edBlocks[selBlockIdx];
-    var P1={};['x','y','z','w','d','h','seg','offset'].forEach(function(k){P1[k]=evalExpr(b[k],r1,r2,r3,ph,null);});
-    var resolved=evalExpr(b[key],r1,r2,r3,ph,P1);
+    var P1={};['x','y','z','w','d','h','seg','offset'].forEach(function(k){P1[k]=evalExpr(b[k],r1,r2,r3,PREVIEW_H,null);});
+    var resolved=evalExpr(b[key],r1,r2,r3,PREVIEW_H,P1);
     var ok=typeof resolved==='number'&&isFinite(resolved)&&!isNaN(resolved);
     badge.className='expr-badge '+(ok?'ok':'err');
     badge.textContent=ok?('= '+Math.round(resolved*100)/100):'⚠ err';
@@ -444,13 +727,40 @@ function toggleExpr(key){
   if(!b._expr[key]){var n=parseFloat(b[key]);if(!isNaN(n))b[key]=n;}
   renderInspector();drawISO();
 }
-function setMat(m){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].mat=m;renderBlockList();renderInspector();drawISO();}
+function setMat(m){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].mat=m;renderBlockList();renderMatRow();drawISO();}
 function setDetail(d){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].detail=d;renderInspector();}
 function setFace(f){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].face=f;renderInspector();}
 
+function updateMatColor(key, hex) {
+  edClrs[key] = hex;
+  renderBlockList();
+  renderMatRow();
+  drawISO();
+}
+
+function addMatKey() {
+  var key = (prompt('New material key (e.g. WIN, RF):') || '').trim().toUpperCase();
+  if (!key || edClrs[key]) return;
+  edClrs[key] = '#888888';
+  if (selBlockIdx >= 0) edBlocks[selBlockIdx].mat = key;
+  renderInspector();
+  drawISO();
+}
+
 // ── ISO canvas ────────────────────────────────────────
 var canvas=null, ctx=null;
-var canvasRot=0; // 0=0° 1=90°CW 2=180° 3=270°CW
+var canvasRot=0;
+
+// Draw after a short delay; if canvas still has no size, retry once more.
+function drawISODeferred(){
+  setTimeout(function(){
+    drawISO();
+    // If canvas was 0×0 (editor just became visible), retry after layout settles
+    if(canvas && (canvas.width<2 || canvas.height<2)){
+      setTimeout(function(){ syncCanvasSize(); drawISO(); }, 120);
+    }
+  }, 60);
+}
 
 function rotateNorm(bl){
   var x=bl.x,y=bl.y,w=bl.w,d=bl.d;
@@ -463,12 +773,18 @@ function rotateNorm(bl){
 function initCanvas(){
   canvas=document.getElementById('iso-canvas');
   ctx=canvas.getContext('2d');
-  var dpr=window.devicePixelRatio||1;
-  canvas.width=canvas.offsetWidth*dpr;
-  canvas.height=canvas.offsetHeight*dpr;
+  syncCanvasSize();
 }
 
-// fields: optional map of already-resolved block values for cross-param refs like "h*0.5"
+function syncCanvasSize(){
+  if(!canvas) return;
+  var dpr=window.devicePixelRatio||1;
+  var rect=canvas.getBoundingClientRect();
+  var w=Math.round(rect.width*dpr), h=Math.round(rect.height*dpr);
+  if(w>4) canvas.width=w;
+  if(h>4) canvas.height=h;
+}
+
 function evalExpr(v,r1v,r2v,r3v,ph,fields){
   if(typeof v==='number')return v;
   var s=String(v);
@@ -484,38 +800,34 @@ function evalExpr(v,r1v,r2v,r3v,ph,fields){
 
 function randomize(){r1=Math.round(Math.random());r2=Math.round(Math.random());r3=Math.round(Math.random());drawISO();}
 
+function hexToRgb(hex){
+  if(typeof hex==='number') return [(hex>>16)&0xff,(hex>>8)&0xff,hex&0xff];
+  if(!hex||typeof hex!=='string'||hex.length<7) return [128,128,128];
+  return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+}
 function shade(rgb,f){return 'rgb('+Math.round(rgb[0]*f)+','+Math.round(rgb[1]*f)+','+Math.round(rgb[2]*f)+')';}
 
 function syncCanvas(){
-  if(!canvas)initCanvas();
-  var dpr=window.devicePixelRatio||1;
-  var w=canvas.offsetWidth*dpr, h=canvas.offsetHeight*dpr;
-  if(w>0&&canvas.width!==w)canvas.width=w;
-  if(h>0&&canvas.height!==h)canvas.height=h;
+  if(!canvas) initCanvas();
+  syncCanvasSize();
 }
 
 function drawISO(){
   syncCanvas();
   var W=canvas.width, H=canvas.height;
   if(!W||!H) return;
-  var ph=parseFloat(document.getElementById('prevh-slider').value)||10;
+  var ph=10;
   var dpr=window.devicePixelRatio||1;
 
-  // Two-pass evaluation: pass1 resolves r1/r2/r3/lv(); pass2 allows cross-field refs (e.g. "h*0.5")
   var EVAL_KEYS=['x','y','z','w','d','h','seg','offset'];
   var solved=edBlocks.map(function(b){
     var p1={};
     EVAL_KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,ph,null); });
     var p2={};
     EVAL_KEYS.forEach(function(k){ p2[k]=evalExpr(b[k],r1,r2,r3,ph,p1); });
-    return{
-      x: p2.x||0, y: p2.y||0, z: p2.z||0,
-      w: Math.max(0.001,p2.w||1),
-      d: Math.max(0.001,p2.d||1),
-      h: Math.max(0.001,p2.h||1),
-      mat: b.mat, detail: b.detail||0,
-      seg: Math.max(2,parseInt(p2.seg)||6)
-    };
+    return{ x:p2.x||0, y:p2.y||0, z:p2.z||0,
+      w:Math.max(0.001,p2.w||1), d:Math.max(0.001,p2.d||1), h:Math.max(0.001,p2.h||1),
+      mat:b.mat, detail:b.detail||0, seg:Math.max(2,parseInt(p2.seg)||6) };
   });
 
   var maxX=0.001, maxY=0.001, maxZ=0.001;
@@ -525,103 +837,158 @@ function drawISO(){
     maxZ=Math.max(maxZ,b.z+b.h);
   });
 
-  // Normalise to [0..1] per axis — same independent scaling SketchUp applies
-  var norm=solved.map(function(b){
+  var norm=solved.map(function(b,i){
     return rotateNorm({x:b.x/maxX, y:b.y/maxY, z:b.z/maxZ,
-           w:b.w/maxX, d:b.d/maxY, h:b.h/maxZ,
-           mat:b.mat, detail:b.detail, seg:b.seg});
+      w:b.w/maxX, d:b.d/maxY, h:b.h/maxZ,
+      mat:b.mat, detail:b.detail, seg:b.seg, _origIdx:i});
   });
 
   var pad=14*dpr;
   var S=Math.min((W-pad*2)/1.732, (H-pad*2)/2);
   var cx=W*0.5, cy=H*0.5;
-
   function ip(x,y,z){return{x:cx+(x-y)*S*0.866, y:cy+(x+y)*S*0.5-z*S};}
-  function poly(pts,fill){
-    ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
-    for(var i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
-    ctx.closePath();ctx.fillStyle=fill;ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=0.4*dpr;ctx.stroke();
+
+  // ── Z-buffer pixel fill ────────────────────────────────
+  var imgData=ctx.createImageData(W,H);
+  var px=imgData.data;
+  // fill background #f0f4f8
+  for(var i=0;i<W*H;i++){px[i*4]=240;px[i*4+1]=244;px[i*4+2]=248;px[i*4+3]=255;}
+  var depthBuf=new Float32Array(W*H).fill(-1e9);
+
+  // Rasterize one parallelogram face into the depth buffer.
+  // Corners in 3D: c0,c1 define edge-u; c0,c3 define edge-v. c2 = c1+(c3-c0).
+  // Depth metric: x+y+z (higher = closer to viewer).
+  function rasterFace(c0,c1,c3,r,g,b2){
+    var sp0=ip(c0[0],c0[1],c0[2]);
+    var sp1=ip(c1[0],c1[1],c1[2]);
+    var sp3=ip(c3[0],c3[1],c3[2]);
+    var d0=c0[0]+c0[1]+c0[2], d1=c1[0]+c1[1]+c1[2], d3=c3[0]+c3[1]+c3[2];
+    var ax=sp1.x-sp0.x, ay=sp1.y-sp0.y;
+    var bx=sp3.x-sp0.x, by=sp3.y-sp0.y;
+    var det=ax*by-ay*bx;
+    if(Math.abs(det)<0.0001) return;
+    var inv=1/det;
+    var sp2x=sp1.x+bx, sp2y=sp1.y+by;
+    var minX=Math.max(0,Math.floor(Math.min(sp0.x,sp1.x,sp2x,sp3.x)));
+    var maxX=Math.min(W-1,Math.ceil(Math.max(sp0.x,sp1.x,sp2x,sp3.x)));
+    var minY=Math.max(0,Math.floor(Math.min(sp0.y,sp1.y,sp2y,sp3.y)));
+    var maxY=Math.min(H-1,Math.ceil(Math.max(sp0.y,sp1.y,sp2y,sp3.y)));
+    for(var py2=minY;py2<=maxY;py2++){
+      for(var px2=minX;px2<=maxX;px2++){
+        var ex=px2-sp0.x, ey=py2-sp0.y;
+        var u=(ex*by-ey*bx)*inv;
+        var v=(ax*ey-ay*ex)*inv;
+        if(u<-0.01||u>1.01||v<-0.01||v>1.01) continue;
+        var depth=d0+u*(d1-d0)+v*(d3-d0);
+        var idx=py2*W+px2;
+        if(depth>depthBuf[idx]){
+          depthBuf[idx]=depth;
+          var pi4=idx*4;
+          px[pi4]=r; px[pi4+1]=g; px[pi4+2]=b2; px[pi4+3]=255;
+        }
+      }
+    }
   }
 
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#f0f4f8';ctx.fillRect(0,0,W,H);
+  norm.forEach(function(bl){
+    var rgb=edClrs[bl.mat]?hexToRgb(edClrs[bl.mat]):[100,120,140];
+    var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
+    function sc(f){return [Math.round(rgb[0]*f),Math.round(rgb[1]*f),Math.round(rgb[2]*f)];}
+    var cf=sc(0.62), cr=sc(0.78), ct=sc(1.0);
+    // front face (y+d): corners c0=(x,y+d,z), c1=(x+w,y+d,z), c3=(x,y+d,z+h)
+    rasterFace([x,y+d,z],[x+w,y+d,z],[x,y+d,z+h], cf[0],cf[1],cf[2]);
+    // right face (x+w): corners c0=(x+w,y,z), c1=(x+w,y+d,z), c3=(x+w,y,z+h)
+    rasterFace([x+w,y,z],[x+w,y+d,z],[x+w,y,z+h], cr[0],cr[1],cr[2]);
+    // top face (z+h): corners c0=(x,y,z+h), c1=(x+w,y,z+h), c3=(x,y+d,z+h)
+    rasterFace([x,y,z+h],[x+w,y,z+h],[x,y+d,z+h], ct[0],ct[1],ct[2]);
+  });
 
-  // Ground outline
-  ctx.strokeStyle='rgba(140,160,180,0.5)';ctx.lineWidth=0.7;
+  ctx.putImageData(imgData,0,0);
+
+  // ── Grid overlay ───────────────────────────────────────
+  ctx.strokeStyle='rgba(140,160,180,0.5)';ctx.lineWidth=0.7*dpr;
   var gp=[ip(0,0,0),ip(1,0,0),ip(1,1,0),ip(0,1,0)];
   ctx.beginPath();ctx.moveTo(gp[0].x,gp[0].y);
   for(var gi=1;gi<gp.length;gi++)ctx.lineTo(gp[gi].x,gp[gi].y);
   ctx.closePath();ctx.stroke();
 
-  // Painter sort: ascending z first (lower drawn first), then descending x+y
-  // (further back = larger x+y = drawn first at same height)
-  var sorted=norm.slice().sort(function(a,b){
-    var dz=a.z-b.z;
-    if(Math.abs(dz)>0.0001) return dz;
-    return (b.x+b.y)-(a.x+a.y);
-  });
+  // ── Edge lines + detail lines + selection outline ──────
+  function strokePath(pts,style,lw){
+    ctx.strokeStyle=style;ctx.lineWidth=lw;
+    ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+    for(var i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+    ctx.closePath();ctx.stroke();
+  }
+  function p2(px2,py2,pz2){return ip(px2,py2,pz2);}
 
-  sorted.forEach(function(bl){
-    var rgb=MAT_BASE[bl.mat]||[100,120,140];
+  norm.forEach(function(bl){
     var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
-    function p(px,py,pz){return ip(px,py,pz);}
-    // Three visible faces
-    poly([p(x,y+d,z),p(x+w,y+d,z),p(x+w,y+d,z+h),p(x,y+d,z+h)], shade(rgb,0.62));
-    poly([p(x+w,y,z),p(x+w,y+d,z),p(x+w,y+d,z+h),p(x+w,y,z+h)], shade(rgb,0.78));
-    poly([p(x,y,z+h),p(x+w,y,z+h),p(x+w,y+d,z+h),p(x,y+d,z+h)], shade(rgb,1.0));
+    // Thin edges
+    strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
+    strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
+    strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
     // Detail lines
-    if(bl.detail!==0 && bl.seg>1){
-      ctx.strokeStyle='rgba(0,0,0,0.22)';
-      ctx.lineWidth=0.6*dpr;
+    if(bl.detail!==0&&bl.seg>1){
+      ctx.strokeStyle='rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
       var n=bl.seg;
       for(var s=1;s<n;s++){
         if(bl.detail===1){
-          // Horizontal divisions on both side faces
           var fz=z+h*s/n;
-          ctx.beginPath();var l=ip(x,y+d,fz),r=ip(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(r.x,r.y);ctx.stroke();
-          ctx.beginPath();l=ip(x+w,y,fz);r=ip(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(r.x,r.y);ctx.stroke();
+          ctx.beginPath();var l=p2(x,y+d,fz),rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
+          ctx.beginPath();l=p2(x+w,y,fz);rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
         } else {
-          // Vertical divisions on both side faces
           var fx=x+w*s/n;
-          ctx.beginPath();var a2=ip(fx,y+d,z),b2=ip(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b2.x,b2.y);ctx.stroke();
+          ctx.beginPath();var a2=p2(fx,y+d,z),b3=p2(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
           var fy=y+d*s/n;
-          ctx.beginPath();a2=ip(x+w,fy,z);b2=ip(x+w,fy,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b2.x,b2.y);ctx.stroke();
+          ctx.beginPath();a2=p2(x+w,fy,z);b3=p2(x+w,fy,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
         }
       }
+    }
+    // Selection outline
+    if(bl._origIdx===selBlockIdx){
+      strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(60,140,255,0.9)',2*dpr);
+      strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],'rgba(60,140,255,0.9)',2*dpr);
+      strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(60,140,255,0.9)',2*dpr);
     }
   });
 }
 
-// ── Test on selection (applies without saving) ────────
+// ── Test on selection ─────────────────────────────────
 function testPattern(){
   var blocks=edBlocks.map(blockToArr);
-  su('testPattern', JSON.stringify(blocks));
+  var name=document.getElementById('ptn-name').value.trim();
+  var cat=document.getElementById('ptn-cat').value;
+  su('testPattern', JSON.stringify({name:name,cat:cat,blocks:blocks}));
   var btn=document.getElementById('test-btn');
+  var orig=btn.textContent;
   btn.classList.add('ok');btn.textContent='✓ Applied';
   setTimeout(function(){btn.classList.remove('ok');btn.textContent='▶ Test';},1600);
 }
 
-// ── Save pattern ──────────────────────────────────────
+// ── Save / Export ─────────────────────────────────────
 function savePattern(){
   var name=document.getElementById('ptn-name').value.trim();
   if(!name){document.getElementById('ptn-name').focus();return;}
   var cat=document.getElementById('ptn-cat').value;
   var blocks=edBlocks.map(blockToArr);
-  var content={CLRS:{},PTNS:{}};content.PTNS[cat]={};content.PTNS[cat][name]=blocks;
+  var content={CLRS:edClrs,PTNS:{}};
+  content.PTNS[cat]={};content.PTNS[cat][name]=blocks;
   su('saveMgz', JSON.stringify({name:name,content:content}));
 }
 
-function saveAsNew(){
-  document.getElementById('ptn-name').value='';
-  document.getElementById('ptn-name').focus();
+function exportMgz(){
+  var name=document.getElementById('ptn-name').value.trim()||'pattern';
+  var cat=document.getElementById('ptn-cat').value;
+  var blocks=edBlocks.map(blockToArr);
+  su('exportMgz', JSON.stringify({name:name,cat:cat,blocks:blocks,clrs:edClrs}));
 }
-
-function refreshPatterns(newPtns){patterns=newPtns;renderNav();renderGrid();closeEditor();}
 
 // ── Init ──────────────────────────────────────────────
 window.onload = function(){ initPatterns(); };
 window.addEventListener('resize',function(){if(canvas)drawISO();});
+document.addEventListener('keydown',function(e){
+  if(e.metaKey && e.key==='w'){ e.preventDefault(); su('closeDialog',''); }
+});
 </script>
 </body>
 </html>

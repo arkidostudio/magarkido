@@ -57,8 +57,67 @@ html, body {
 .hbtn:hover { background: rgba(255,255,255,.28); }
 .hbtn.danger-btn { background: rgba(217,48,37,.35); border-color: rgba(255,100,90,.4); }
 .hbtn.danger-btn:hover { background: rgba(217,48,37,.55); }
-.hbtn.absorb-btn { background: rgba(0,150,100,.25); border-color: rgba(0,200,140,.35); }
-.hbtn.absorb-btn:hover { background: rgba(0,150,100,.45); }
+.hbtn:disabled { opacity: .35; cursor: default; pointer-events: none; }
+
+/* ── Files bar ───────────────────────────────────────── */
+#filesbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 30px;
+  overflow-x: auto;
+}
+#filesbar::-webkit-scrollbar { height: 3px; }
+#filesbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+
+.files-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.files-empty {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+.files-empty.hidden { display: none; }
+
+#file-chips { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.file-chip-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.file-chip-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 50%;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background .1s, color .1s;
+}
+.file-chip-x:hover { background: #eee; color: var(--danger); }
 
 /* ── Body ────────────────────────────────────────────── */
 #body { display: flex; flex: 1; overflow: hidden; }
@@ -149,6 +208,7 @@ html, body {
   z-index: 2;
 }
 
+
 .plbl {
   padding: 4px;
   text-align: center;
@@ -214,26 +274,111 @@ html, body {
 }
 .clear-sel-btn:hover { background: var(--border); color: var(--text); }
 
-#applyrow { padding: 7px 10px 9px; background: var(--surface); border-top: 1px solid var(--border); }
-
-#applybtn {
-  width: 100%;
-  padding: 8px;
+#applyrow {
+  padding: 6px 10px 8px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 38px;
+}
+#sel-chips-wrap {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+#sel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.no-sel-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sel-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
   background: var(--accent);
   color: #fff;
+  border-radius: 4px;
+  padding: 2px 5px 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.sel-chip-x {
+  background: none;
   border: none;
-  border-radius: 6px;
+  color: rgba(255,255,255,.75);
+  cursor: pointer;
   font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  font-family: inherit;
+}
+.sel-chip-x:hover { color: #fff; }
+.sel-clear-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.sel-clear-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+.sel-summary-txt {
+  flex: 1;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desel-btn {
+  padding: 5px 9px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.desel-btn:hover { background: var(--bg); border-color: var(--danger); color: var(--danger); }
+.desel-btn.hidden { display: none; }
+
+.toggle-btn {
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: background .15s;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
 }
-#applybtn:hover  { background: var(--accent-h); }
-#applybtn.ok     { background: var(--success); }
+.toggle-btn:hover  { background: var(--border); }
+.toggle-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* ══════════════════════════════════════════════════════
-   VISUAL EDITOR OVERLAY  (light theme)
+   VISUAL EDITOR OVERLAY
    ══════════════════════════════════════════════════════ */
 #edov {
   position: fixed;
@@ -245,11 +390,11 @@ html, body {
 }
 #edov.hidden { display: none; }
 
-/* ── Editor topbar — stays accent-blue ───────────────── */
+/* ── Editor topbar ───────────────────────────────────── */
 #edtop {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   padding: 0 10px;
   height: 40px;
   background: var(--accent);
@@ -258,6 +403,7 @@ html, body {
 
 #ptn-name {
   flex: 1;
+  min-width: 80px;
   padding: 5px 8px;
   background: rgba(255,255,255,.18);
   border: 1px solid rgba(255,255,255,.3);
@@ -272,7 +418,7 @@ html, body {
 #ptn-name:focus { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.6); }
 #ptn-name::placeholder { color: rgba(255,255,255,.5); }
 
-#ptn-cat {
+#ptn-cat, #ptn-sel {
   padding: 5px 6px;
   background: rgba(255,255,255,.18);
   border: 1px solid rgba(255,255,255,.3);
@@ -282,11 +428,22 @@ html, body {
   font-family: inherit;
   outline: none;
   cursor: pointer;
+  max-width: 120px;
 }
-#ptn-cat option { background: #fff; color: var(--text); }
+#ptn-cat option, #ptn-sel option { background: #fff; color: var(--text); }
+
+.src-file {
+  font-size: 10px;
+  color: rgba(255,255,255,.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+  flex-shrink: 0;
+}
 
 /* Editor topbar buttons */
-.undo-btn, .test-btn, .save-btn, .x-btn, .absorb-ed-btn {
+.undo-btn, .x-btn, .absorb-ed-btn, .export-btn, .save-btn {
   padding: 5px 10px;
   border-radius: 5px;
   font-size: 12px;
@@ -299,11 +456,9 @@ html, body {
   transition: background .15s;
   white-space: nowrap;
 }
-.undo-btn:hover, .test-btn:hover, .x-btn:hover, .saveas-btn:hover, .absorb-ed-btn:hover { background: rgba(255,255,255,.28); }
+.undo-btn:hover, .x-btn:hover, .absorb-ed-btn:hover, .export-btn:hover { background: rgba(255,255,255,.28); }
 .absorb-ed-btn { background: rgba(0,180,120,.3); border-color: rgba(0,220,150,.4); }
 .undo-btn:disabled { opacity: .35; cursor: default; }
-.test-btn.ok { background: rgba(52,168,83,.7); border-color: rgba(52,168,83,.9); }
-.saveas-btn { background: rgba(255,255,255,.15); color: #fff; }
 .save-btn { background: rgba(255,255,255,.92); color: var(--accent); border-color: rgba(255,255,255,.9); }
 .save-btn:hover { background: #fff; }
 
@@ -316,7 +471,7 @@ html, body {
 
 /* ── Block list ──────────────────────────────────────── */
 #blocklist {
-  width: 130px;
+  width: 134px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
@@ -328,13 +483,54 @@ html, body {
 #blitems {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: 6px 6px 2px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 #blitems::-webkit-scrollbar { width: 4px; }
 #blitems::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+#blbtns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px 6px;
+  flex-shrink: 0;
+}
+
+#bladd, #bldup {
+  padding: 6px;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  text-align: center;
+}
+#bladd:hover, #bldup:hover { border-color: var(--accent); color: var(--accent); }
+
+#blmove {
+  display: flex;
+  gap: 4px;
+}
+#blup, #bldown {
+  flex: 1;
+  padding: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  text-align: center;
+}
+#blup:hover, #bldown:hover { border-color: var(--accent); color: var(--accent); }
 
 .bchip {
   display: flex;
@@ -347,11 +543,11 @@ html, body {
   border: 1px solid var(--border);
   transition: border-color .1s, background .1s;
   user-select: none;
+  position: relative;
 }
 .bchip:hover   { border-color: #aaa; }
 .bchip.active  { background: var(--sel-bg); border-color: var(--accent); }
 .bchip.dragging   { opacity: .4; }
-.bchip.drag-over  { border-color: var(--accent); background: var(--sel-bg); border-style: dashed; }
 
 .bchip-drag {
   color: #bbb;
@@ -369,19 +565,15 @@ html, body {
 .bchip-mat  { font-size: 10px; color: var(--muted); }
 .bchip-dim  { font-size: 9px; color: #aaa; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-#bladd {
-  margin: 6px;
-  padding: 6px;
-  background: none;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color .15s, color .15s;
+/* Drop indicator line */
+.drop-indicator {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  margin: 0 4px;
+  flex-shrink: 0;
+  pointer-events: none;
 }
-#bladd:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Inspector ───────────────────────────────────────── */
 #inspector {
@@ -398,7 +590,6 @@ html, body {
 
 .no-sel { color: var(--muted); font-size: 12px; padding: 20px 0; text-align: center; }
 
-/* Field group */
 .fg {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -425,6 +616,8 @@ html, body {
 }
 .frow:last-child { border-bottom: none; }
 
+.mat-frow { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+
 .flbl {
   width: 38px;
   font-size: 11px;
@@ -447,7 +640,6 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Expression toggle rows */
 .fexpr-wrap { flex: 1; display: flex; align-items: center; gap: 5px; }
 .fexpr-inp {
   flex: 1;
@@ -492,24 +684,62 @@ html, body {
 .fxtog.on    { background: #fff8f0; border-color: #f0c080; color: #b06000; }
 
 /* Material chips */
-.mat-row { display: flex; gap: 5px; flex-wrap: wrap; }
-.mchip {
-  padding: 4px 8px;
+.mat-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.mchip-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px 3px 3px;
   border-radius: 5px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: var(--bg);
+  transition: border-color .1s, background .1s;
+}
+.mchip-wrap:hover  { background: #eee; }
+.mchip-wrap.active { border-color: var(--accent); background: var(--sel-bg); }
+
+.mchip-picker {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  flex-shrink: 0;
+}
+.mchip-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.mchip-picker::-webkit-color-swatch { border: none; border-radius: 3px; }
+
+.mchip-lbl {
   font-size: 11px;
   font-weight: 600;
-  cursor: pointer;
-  border: 2px solid transparent;
-  font-family: inherit;
-  transition: opacity .1s, border-color .1s;
-  opacity: .55;
+  color: var(--text);
+  pointer-events: none;
 }
-.mchip:hover  { opacity: .85; }
-.mchip.active { opacity: 1; border-color: rgba(0,0,0,.25); }
-.mchip.bdy { background: #5B85A8; color: #fff; }
-.mchip.top { background: #A8906B; color: #fff; }
-.mchip.btm { background: #7A8A96; color: #fff; }
-.mchip.sld { background: #4E5E6E; color: #fff; }
+
+.mat-add-btn {
+  width: 26px; height: 26px;
+  border-radius: 5px;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: border-color .1s, color .1s;
+}
+.mat-add-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Detail chips */
 .det-row { display: flex; gap: 5px; }
@@ -561,7 +791,7 @@ html, body {
 
 /* ── ISO canvas area ─────────────────────────────────── */
 #canvas-area {
-  width: 260px;
+  width: 240px;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
@@ -573,26 +803,27 @@ html, body {
   flex: 1;
   width: 100%;
   display: block;
-  min-height: 0;
-  max-height: 280px;
+  min-height: 180px;
 }
 
 #canvas-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border-top: 1px solid var(--border);
   background: var(--bg);
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
-.cctrl-lbl { font-size: 10px; color: var(--muted); flex-shrink: 0; }
-#canvas-ctrl input[type=range] { flex: 1; accent-color: var(--accent); height: 3px; cursor: pointer; min-width: 0; }
-#prevh-val { font-size: 10px; color: var(--muted); width: 30px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#canvas-ctrl-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.rot-btn { flex: 0 0 auto; padding: 5px 8px; }
 
 .rand-btn {
-  width: 100%;
-  padding: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 4px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -600,9 +831,20 @@ html, body {
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
-  transition: background .1s, border-color .1s;
+  transition: background .1s, border-color .1s, color .1s;
+  text-align: center;
 }
 .rand-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.rand-btn.test-btn {
+  margin-top: 2px;
+  background: rgba(26,115,232,.08);
+  border-color: rgba(26,115,232,.3);
+  color: var(--accent);
+  font-weight: 600;
+}
+.rand-btn.test-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rand-btn.test-btn.ok { background: var(--success); color: #fff; border-color: var(--success); }
 
 /* ── Help overlay ────────────────────────────────────── */
 #helpov {
