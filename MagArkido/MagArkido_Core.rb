@@ -47,11 +47,34 @@ module MagArkido
       @no_detail = false
       @cb        = DEFAULT_BLOCK
       # Preserve loaded data across reloads (rel) within the same SketchUp session.
-      # Only reset on true first load (when @files hasn't been set yet).
+      # Only auto-scan and reset on true first load (when @files hasn't been set yet).
       unless @files
-        @files = []
-        @ptn   = {}
-        @clrs  = {}
+        @files     = []
+        @ptn       = {}
+        @clrs      = {}
+        @offloaded = [] # paths explicitly removed by the user this session
+
+        # Auto-load every .mgz found in the bundled Patterns folder
+        Dir.mkdir(PATTERNS_DIR) rescue nil
+        Dir[File.join(PATTERNS_DIR, '*.mgz')].sort.each do |path|
+          begin
+            x = JSON.parse(File.read(path))
+            file_ptns = {}
+            merge_ptns(file_ptns, x['PTNS'] || {})
+            @files << { name: File.basename(path), path: path,
+                        clrs: x['CLRS'] || {}, ptns: file_ptns }
+            (x['CLRS'] || {}).each do |k, v|
+              @clrs[k] = v
+              m = @mts[k] || @mts.add(k)
+              m.color = v.is_a?(Integer) ?
+                Sketchup::Color.new(v >> 16 & 0xff, v >> 8 & 0xff, v & 0xff) :
+                Sketchup::Color.new(v)
+            end
+            merge_ptns(@ptn, x['PTNS'] || {})
+          rescue => e
+            puts "MagArkido auto-load error (#{File.basename(path)}): #{e.message}"
+          end
+        end
       end
     end
 
@@ -381,6 +404,7 @@ module MagArkido
           path = UI.openpanel('Load Pattern File', PATTERNS_DIR, 'Pattern Files|*.mgz||')
           next unless path && File.exist?(path)
           begin
+            @offloaded.delete(path) # allow re-adding a previously offloaded file
             x = JSON.parse(File.read(path))
             unless @files.any? { |f| f[:path] == path }
               file_ptns = {}
@@ -404,6 +428,7 @@ module MagArkido
       # Remove a loaded file from the session (rebuilds ptn/clrs from remaining files)
       @mgr.add_action_callback('offloadFile') do |_ctx, data|
         path = JSON.parse(data)
+        @offloaded << path unless @offloaded.include?(path)
         @files.reject! { |f| f[:path] == path }
         @ptn  = {}
         @clrs = {}
