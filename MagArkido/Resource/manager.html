@@ -16,7 +16,6 @@
     <button class="hbtn" onclick="su('importMgzSession')" title="Load a .mgz file into this session">&#128194; Load .mgz</button>
     <button class="hbtn" onclick="newPattern()" title="New pattern">&#43; New</button>
     <button class="hbtn files-only-btn" id="edit-ptn-btn" onclick="openEditor()" title="Edit selected pattern" disabled>&#9998; Edit Pattern</button>
-    <button class="hbtn danger-btn files-only-btn" onclick="deleteSel()" title="Delete selected objects from model">&#128465; Delete</button>
   </header>
 
   <!-- Loaded files bar -->
@@ -38,10 +37,7 @@
       <div id="pane-inner">
         <div id="gwrap"><div id="grid"></div></div>
         <div id="applyrow">
-          <div id="sel-chips-wrap">
-            <div id="sel-chips"></div>
-            <span id="no-sel-hint" class="no-sel-hint"></span>
-          </div>
+          <div id="sel-summary"></div>
           <button class="apply-action-btn" onclick="selectAll()" title="Select all patterns in current category">Select All</button>
           <button class="apply-action-btn" onclick="randomizeSelection()" title="Pick a random pattern from the current category">&#127922; Random</button>
           <button id="nodtlbtn" class="apply-action-btn" onclick="toggleNoDetail()" title="Strip all detail lines when applying">No Detail</button>
@@ -413,37 +409,42 @@ function syncSelectionToRuby() {
 }
 
 function updateSummary() {
-  var chipsEl = document.getElementById('sel-chips');
-  var hintEl  = document.getElementById('no-sel-hint');
-  chipsEl.innerHTML = '';
+  var el = document.getElementById('sel-summary');
+  el.innerHTML = '';
+
   if (selCatName === 'auto') {
-    hintEl.textContent = '⚡ Auto-select active';
+    el.innerHTML = '<span class="sel-hint">⚡ Auto-select active</span>';
     hideMgrPreview(); return;
   }
   if (!selKeys.length) {
-    hintEl.textContent = loadedFiles.length ? 'No patterns selected — click cards to select' : '';
+    if (loadedFiles.length) el.innerHTML = '<span class="sel-hint">No patterns selected — click cards to select</span>';
     hideMgrPreview(); return;
   }
-  hintEl.textContent = '';
-  selKeys.forEach(function(s) {
+
+  var n = selKeys.length;
+  if (n === 1) {
+    // Single selection: show name + optional cat + deselect ×
+    var s = selKeys[0];
+    var label = s.pattern + (selCatName === null ? ' <span class="sum-cat">(' + s.category + ')</span>' : '');
     var chip = document.createElement('div');
     chip.className = 'sel-chip';
-    chip.innerHTML = '<span>' + s.pattern + ' <span class="sum-cat">(' + s.category + ')</span></span>';
+    chip.innerHTML = '<span>' + label + '</span>';
     var x = document.createElement('button');
-    x.className = 'sel-chip-x';
-    x.textContent = '×';
-    x.title = 'Deselect';
-    x.addEventListener('click', (function(cat, key){ return function(){ deselectPattern(cat, key); }; })(s.category, s.pattern));
+    x.className = 'sel-chip-x'; x.textContent = '×'; x.title = 'Deselect';
+    x.addEventListener('click', function(){ deselectPattern(s.category, s.pattern); });
     chip.appendChild(x);
-    chipsEl.appendChild(chip);
-  });
-  // Clear all button
-  var clrBtn = document.createElement('button');
-  clrBtn.className = 'sel-clear-btn';
-  clrBtn.textContent = 'Clear all';
-  clrBtn.onclick = clearSel;
-  chipsEl.appendChild(clrBtn);
-  // Show manager preview for the last selected pattern
+    el.appendChild(chip);
+  } else {
+    // Multiple: compact badge + clear
+    var badge = document.createElement('span');
+    badge.className = 'sel-count-badge';
+    badge.textContent = n + ' selected';
+    var clr = document.createElement('button');
+    clr.className = 'sel-clear-btn'; clr.textContent = 'Clear all'; clr.onclick = clearSel;
+    el.appendChild(badge);
+    el.appendChild(clr);
+  }
+
   showMgrPreview();
 }
 
