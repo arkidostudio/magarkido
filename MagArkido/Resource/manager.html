@@ -57,6 +57,7 @@
     <button class="absorb-ed-btn" onclick="su('absorb')" title="Absorb selected group's sub-groups">&#9673; Absorb</button>
     <button class="save-btn" onclick="savePattern()">Save</button>
     <button class="export-btn" onclick="exportMgz()" title="Export as .mgz file to a chosen location">&#8595; Export</button>
+    <button class="help-btn" onclick="document.getElementById('helpov').classList.remove('hidden')" title="Expression reference &amp; guide">?</button>
     <button class="x-btn" onclick="closeEditor()">&#10005;</button>
   </div>
 
@@ -407,7 +408,7 @@ function updateUndoBtn() {
 }
 
 var KEYS = ['x','y','z','w','d','h','mat','detail','face','seg','offset'];
-var EXPR_KEYS = ['x','y','z','w','d','h','seg','offset'];
+var EXPR_KEYS = ['x','y','z','w','d','h','face','seg','offset'];
 var _blockIdCounter = 1;
 
 function arrToBlock(a) {
@@ -691,9 +692,21 @@ function renderInspector() {
     +'</div></div></div>'
     +(b.detail!==0
       ?'<div class="fg"><div class="fg-head">Detail options</div>'
-        +'<div class="frow"><span class="flbl" title="Which face the lines appear on (0 = front/Y+)">Face</span><div class="face-row">'
-        +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')" title="Face '+f+'">'+f+'</button>';}).join('')
-        +'</div></div>'
+        +(function(){
+          var fv=b.face, fex=ex.face;
+          var fr=evalExpr(fv,r1,r2,r3,PREVIEW_H,p1);
+          var fok=typeof fr==='number'&&isFinite(fr)&&!isNaN(fr);
+          var fbadge='<span class="expr-badge '+(fok?'ok':'err')+'" id="eb-face">'+(fok?'= '+Math.round(fr):'⚠ err')+'</span>';
+          if(fex){
+            return '<div class="frow"><span class="flbl" title="Which face (0=front, 1=back, 2=left, 3=right, 4=bottom, 5=top)">face</span>'
+              +'<div class="fexpr-wrap"><input type="text" class="fexpr-inp expr-mode" value="'+String(fv)+'" oninput="setFieldExpr(\'face\',this.value)">'+fbadge
+              +'<button class="fxtog on" onclick="toggleExpr(\'face\')" title="Switch to picker">#</button></div></div>';
+          }
+          return '<div class="frow"><span class="flbl" title="Which face (0=front, 1=back, 2=left, 3=right, 4=bottom, 5=top)">face</span>'
+            +'<div class="fexpr-wrap"><div class="face-row">'
+            +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')" title="Face '+f+'">'+f+'</button>';}).join('')
+            +'</div>'+fbadge+'<button class="fxtog" onclick="toggleExpr(\'face\')" title="Switch to expression mode">fx</button></div></div>';
+        })()
         +eRow('seg',b.seg,ex.seg,2,20,p1,'Number of line segments')
         +eRow('offset',b.offset,ex.offset,0,8,p1,'Inset from block edges')+'</div>'
       :'')
@@ -721,19 +734,16 @@ function eRow(key,val,isExpr,mn,mx,p1fields,hint) {
   var strVal=typeof val==='string'?val:String(num);
   var clamped=Math.min(mx,Math.max(mn,num));
   var PREVIEW_H = 10;
-  var badge='';
-  if(isExpr){
-    var resolved=evalExpr(val,r1,r2,r3,PREVIEW_H,p1fields||null);
-    var ok=typeof resolved==='number'&&isFinite(resolved)&&!isNaN(resolved);
-    badge='<span class="expr-badge '+(ok?'ok':'err')+'" id="eb-'+key+'">'+(ok?('= '+(Math.round(resolved*100)/100)):'⚠ err')+'</span>';
-  }
+  var resolved=evalExpr(val,r1,r2,r3,PREVIEW_H,p1fields||null);
+  var ok=typeof resolved==='number'&&isFinite(resolved)&&!isNaN(resolved);
+  var badge='<span class="expr-badge '+(ok?'ok':'err')+'" id="eb-'+key+'">'+(ok?('= '+(Math.round(resolved*100)/100)):'⚠ err')+'</span>';
   var titleAttr=hint?' title="'+hint+'"':'';
   return '<div class="frow"><span class="flbl"'+titleAttr+'>'+key+'</span><div class="fexpr-wrap">'
     +(isExpr
       ?'<input type="text" class="fexpr-inp expr-mode" value="'+strVal+'" oninput="setFieldExpr(\''+key+'\',this.value)">'+badge
       :'<input type="range" class="fslider" min="'+mn+'" max="'+mx+'" step="1" value="'+clamped+'"'
        +' oninput="setField(\''+key+'\',parseFloat(this.value));document.getElementById(\'fv-'+key+'\').textContent=this.value">'
-       +'<span class="fval" id="fv-'+key+'">'+num+'</span>')
+       +'<span class="fval" id="fv-'+key+'">'+num+'</span>'+badge)
     +'<button class="fxtog'+(isExpr?' on':'')+'" onclick="toggleExpr(\''+key+'\')" title="Toggle expression mode">'+(isExpr?'#':'fx')+'</button>'
     +'</div></div>';
 }

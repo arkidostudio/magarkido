@@ -443,7 +443,7 @@ html, body {
 }
 
 /* Editor topbar buttons */
-.undo-btn, .x-btn, .absorb-ed-btn, .export-btn, .save-btn {
+.undo-btn, .x-btn, .absorb-ed-btn, .export-btn, .save-btn, .help-btn {
   padding: 5px 10px;
   border-radius: 5px;
   font-size: 12px;
@@ -456,7 +456,8 @@ html, body {
   transition: background .15s;
   white-space: nowrap;
 }
-.undo-btn:hover, .x-btn:hover, .absorb-ed-btn:hover, .export-btn:hover { background: rgba(255,255,255,.28); }
+.undo-btn:hover, .x-btn:hover, .absorb-ed-btn:hover, .export-btn:hover, .help-btn:hover { background: rgba(255,255,255,.28); }
+.help-btn { font-weight: 700; min-width: 22px; }
 .absorb-ed-btn { background: rgba(0,180,120,.3); border-color: rgba(0,220,150,.4); }
 .undo-btn:disabled { opacity: .35; cursor: default; }
 .save-btn { background: rgba(255,255,255,.92); color: var(--accent); border-color: rgba(255,255,255,.9); }
