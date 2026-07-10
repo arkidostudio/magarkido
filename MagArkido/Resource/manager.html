@@ -68,11 +68,11 @@
     <input type="text" id="ptn-name" placeholder="Pattern name">
     <select id="ptn-cat" onchange="onCatChange(this)"></select>
     <select id="ptn-sel" onchange="switchToPattern(this.value)" title="Switch pattern"></select>
-    <span id="src-file-badge" class="src-file"></span>
+    <select id="src-file-sel" title="Save target .mgz file"></select>
     <button class="undo-btn" id="undo-btn" onclick="undoEditor()" title="Undo last change" disabled>&#8617;</button>
     <button class="absorb-ed-btn" onclick="su('absorb')" title="Absorb selected group's sub-groups">&#9673; Absorb</button>
     <button class="save-btn" onclick="savePattern()">Save</button>
-    <button class="export-btn" onclick="exportMgz()" title="Export as .mgz file to a chosen location">&#8595; Export</button>
+    <button class="export-btn" onclick="exportMgz()" title="Export as .mgz file to a chosen location">&#8593; Export .mgz</button>
     <button class="help-btn" onclick="document.getElementById('helpov').classList.remove('hidden')" title="Expression reference &amp; guide">?</button>
     <button class="x-btn" onclick="closeEditor()">&#10005;</button>
   </div>
@@ -83,10 +83,7 @@
       <div id="blbtns">
         <button id="bladd" onclick="addBlock()">+ Add Block</button>
         <button id="bldup" onclick="duplicateBlock()">&#10697; Duplicate</button>
-        <div id="blmove">
-          <button id="blup" onclick="moveBlock(-1)" title="Move block up">&#8593; Up</button>
-          <button id="bldown" onclick="moveBlock(1)" title="Move block down">&#8595; Down</button>
-        </div>
+        <button id="blrem" onclick="deleteBlock(selBlockIdx)" disabled>&#10005; Remove</button>
       </div>
     </div>
     <div id="inspector"><p class="no-sel">Select a block to edit</p></div>
@@ -98,7 +95,7 @@
           <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">↺</button>
           <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">↻</button>
           <button class="rand-btn" onclick="randomize()">&#127922; Rnd</button>
-          <button class="rand-btn" onclick="drawISO()" title="Redraw canvas">&#8635;</button>
+          <button class="rand-btn rot-btn" onclick="drawISO()" title="Redraw canvas">&#10226;</button>
           <button class="rand-btn test-btn" id="test-btn" onclick="testPattern()">&#9654; Test</button>
         </div>
       </div>
@@ -158,7 +155,7 @@
     <p class="htxt">Use <b>fx</b> on any field to switch it to expression mode.</p>
 
     <div class="hsec">Canvas Controls</div>
-    <p class="htxt"><b>◀ ▶</b> Rotate view &nbsp;·&nbsp; <b>Rnd</b> Re-roll random values &nbsp;·&nbsp; <b>↺</b> Redraw &nbsp;·&nbsp; <b>▶ Test</b> Apply to selected SketchUp objects as a preview</p>
+    <p class="htxt"><b>◀ ▶</b> Rotate view &nbsp;·&nbsp; <b>Rnd</b> Re-roll random values &nbsp;·&nbsp; <b>&#10226;</b> Redraw canvas &nbsp;·&nbsp; <b>▶ Test</b> Apply to selected SketchUp objects as a preview</p>
 
     <p class="hclose">Click anywhere outside to close</p>
   </div>
@@ -245,7 +242,7 @@ function offloadFile(path) {
 }
 
 // ── Refresh all (called after load / offload / save) ──
-function refreshAll(newPtns, newFiles, newClrs) {
+function refreshAll(newPtns, newFiles, newClrs, keepEditor) {
   patterns = newPtns;
   loadedFiles = newFiles;
   edClrs = normalizeClrs(newClrs || {});
@@ -257,7 +254,7 @@ function refreshAll(newPtns, newFiles, newClrs) {
   renderNav();
   renderGrid();
   updateEditBtn();
-  closeEditor();
+  if (!keepEditor) { closeEditor(); } else { updateSrcFile(); }
   generateThumbs();
 }
 
@@ -709,8 +706,8 @@ function updateUndoBtn() {
   if (btn) btn.disabled = edHistory.length === 0;
 }
 
-var KEYS = ['x','y','z','w','d','h','mat','detail','face','seg','offset'];
-var EXPR_KEYS = ['x','y','z','w','d','h','face','seg','offset'];
+var KEYS = ['x','y','z','w','d','h','mat','detail','face','seg','offset','segV'];
+var EXPR_KEYS = ['x','y','z','w','d','h','face','seg','offset','segV'];
 var _blockIdCounter = 1;
 
 function arrToBlock(a) {
@@ -731,7 +728,7 @@ function blockToArr(b) { return KEYS.map(function(k){return b[k];}); }
 
 function makeDefault() {
   var firstMat = Object.keys(edClrs)[0] || 'BDY';
-  return {x:0,y:0,z:0,w:40,d:40,h:20,mat:firstMat,detail:0,face:0,seg:6,offset:0,_expr:{},_id:_blockIdCounter++};
+  return {x:0,y:0,z:0,w:40,d:40,h:20,mat:firstMat,detail:0,face:0,seg:6,offset:0,segV:6,_expr:{},_id:_blockIdCounter++};
 }
 
 // Find which loaded file a pattern belongs to
@@ -766,7 +763,7 @@ function switchToPattern(key) {
   selBlockIdx = 0;
   document.getElementById('ptn-name').value = key;
   edSourceFile = findSourceFile(cat, key);
-  updateSrcBadge();
+  updateSrcFile();
   // Update edClrs from source file's CLRS if available
   for (var i = 0; i < loadedFiles.length; i++) {
     if (loadedFiles[i].name === edSourceFile && loadedFiles[i].clrs) {
@@ -777,9 +774,24 @@ function switchToPattern(key) {
   renderBlockList(); renderInspector(); drawISO();
 }
 
-function updateSrcBadge() {
-  var el = document.getElementById('src-file-badge');
-  if (el) el.textContent = edSourceFile ? edSourceFile : '';
+function updateSrcFile() {
+  var sel = document.getElementById('src-file-sel');
+  if (!sel) return;
+  sel.innerHTML = '';
+  loadedFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = f.path || f.name;
+    opt.textContent = f.name;
+    sel.appendChild(opt);
+  });
+  if (edSourceFile) {
+    for (var i = 0; i < loadedFiles.length; i++) {
+      if (loadedFiles[i].name === edSourceFile) {
+        sel.value = loadedFiles[i].path || loadedFiles[i].name;
+        break;
+      }
+    }
+  }
 }
 
 function newPattern() {
@@ -791,7 +803,7 @@ function newPattern() {
   document.getElementById('ptn-name').value = '';
   document.getElementById('ptn-cat').value = firstCat;
   refreshPtnSel();
-  updateSrcBadge();
+  updateSrcFile();
   document.getElementById('edov').classList.remove('hidden');
   updateUndoBtn();
   renderBlockList(); renderInspector(); drawISODeferred();
@@ -834,7 +846,7 @@ function openEditor() {
   document.getElementById('ptn-cat').value  = scat;
   refreshPtnSel();
   document.getElementById('ptn-sel').value = sname;
-  updateSrcBadge();
+  updateSrcFile();
   document.getElementById('edov').classList.remove('hidden');
   updateUndoBtn();
   renderBlockList(); renderInspector(); drawISODeferred();
@@ -972,6 +984,8 @@ function removeDropIndicator() {
 // ── Inspector ─────────────────────────────────────────
 function renderInspector() {
   var el=document.getElementById('inspector');
+  var remBtn=document.getElementById('blrem');
+  if(remBtn) remBtn.disabled=(selBlockIdx<0||selBlockIdx>=edBlocks.length);
   if (selBlockIdx<0||selBlockIdx>=edBlocks.length) { el.innerHTML='<p class="no-sel">Select a block to edit</p>'; return; }
   var b=edBlocks[selBlockIdx];
   var ex=b._expr||{};
@@ -991,6 +1005,7 @@ function renderInspector() {
     +'<button class="dchip'+(b.detail===0?' active':'')+'" onclick="setDetail(0)" title="No detail lines">None</button>'
     +'<button class="dchip'+(b.detail===1?' active':'')+'" onclick="setDetail(1)" title="Horizontal grooves">&#8801; Horiz</button>'
     +'<button class="dchip'+(b.detail===2?' active':'')+'" onclick="setDetail(2)" title="Vertical grooves">||| Vert</button>'
+    +'<button class="dchip'+(b.detail===3?' active':'')+'" onclick="setDetail(3)" title="Grid (horiz + vert)">&#35; Grid</button>'
     +'</div></div></div>'
     +(b.detail!==0
       ?'<div class="fg"><div class="fg-head">Detail options</div>'
@@ -1009,11 +1024,13 @@ function renderInspector() {
             +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')" title="Face '+f+'">'+f+'</button>';}).join('')
             +'</div>'+fbadge+'<button class="fxtog" onclick="toggleExpr(\'face\')" title="Switch to expression mode">fx</button></div></div>';
         })()
-        +eRow('seg',b.seg,ex.seg,2,20,p1,'Number of line segments')
+        +(b.detail===3
+          ?eRow('seg',b.seg,ex.seg,2,20,p1,'Horizontal segments')
+           +eRow('segV',b.segV,ex.segV,2,20,p1,'Vertical segments')
+          :eRow('seg',b.seg,ex.seg,2,20,p1,'Number of line segments'))
         +eRow('offset',b.offset,ex.offset,0,8,p1,'Inset from block edges')+'</div>'
       :'')
-    +'<div class="expr-hint">Tip: press <b>fx</b> on any field to write an expression — use <b>r1–r6</b>, <b>rand(n)</b>, <b>lv(t,3.5)</b> or peer fields like <b>h</b>, <b>w</b>.</div>'
-    +'<button class="del-btn" onclick="deleteBlock('+selBlockIdx+')">Remove block</button>';
+    ;
   renderMatRow();
 }
 
@@ -1079,8 +1096,8 @@ function toggleExpr(key){
   renderInspector();drawISO();
 }
 function setMat(m){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].mat=m;renderBlockList();renderMatRow();drawISO();}
-function setDetail(d){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].detail=d;renderInspector();}
-function setFace(f){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].face=f;renderInspector();}
+function setDetail(d){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].detail=d;renderInspector();drawISO();}
+function setFace(f){if(selBlockIdx<0)return;pushHistory();edBlocks[selBlockIdx].face=f;renderInspector();drawISO();}
 
 function updateMatColor(key, hex) {
   edClrs[key] = hex;
@@ -1191,7 +1208,7 @@ function drawISO(){
   var ph=10;
   var dpr=window.devicePixelRatio||1;
 
-  var EVAL_KEYS=['x','y','z','w','d','h','seg','offset'];
+  var EVAL_KEYS=['x','y','z','w','d','h','seg','offset','segV'];
   var solved=edBlocks.map(function(b){
     var p1={};
     EVAL_KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,ph,null); });
@@ -1199,7 +1216,9 @@ function drawISO(){
     EVAL_KEYS.forEach(function(k){ p2[k]=evalExpr(b[k],r1,r2,r3,ph,p1); });
     return{ x:p2.x||0, y:p2.y||0, z:p2.z||0,
       w:Math.max(0.001,p2.w||1), d:Math.max(0.001,p2.d||1), h:Math.max(0.001,p2.h||1),
-      mat:b.mat, detail:b.detail||0, seg:Math.max(2,parseInt(p2.seg)||6) };
+      mat:b.mat, detail:b.detail||0, face:b.face||0,
+      seg:Math.max(2,parseInt(p2.seg)||6), offset:Math.max(0,p2.offset||0),
+      segV:Math.max(2,parseInt(p2.segV)||parseInt(p2.seg)||6) };
   });
 
   var maxX=0.001, maxY=0.001, maxZ=0.001;
@@ -1212,7 +1231,7 @@ function drawISO(){
   var norm=solved.map(function(b,i){
     return rotateNorm({x:b.x/maxX, y:b.y/maxY, z:b.z/maxZ,
       w:b.w/maxX, d:b.d/maxY, h:b.h/maxZ,
-      mat:b.mat, detail:b.detail, seg:b.seg, _origIdx:i});
+      mat:b.mat, detail:b.detail, face:b.face, seg:b.seg, offset:b.offset, segV:b.segV, _origIdx:i});
   });
 
   var pad=14*dpr;
@@ -1298,53 +1317,74 @@ function drawISO(){
 
   norm.forEach(function(bl,blIdx){
     var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
-    var isSel=bl._origIdx===selBlockIdx;
-    var edgeCol=isSel?'rgba(60,140,255,0.9)':'rgba(0,0,0,0.13)';
-    var edgeLw=isSel?2*dpr:0.5*dpr;
-
-    // Front face (y+d) — centre at (x+w/2, y+d, z+h/2)
+    var face=bl.face||0;
+    var ofs=bl.offset||0;
+    var detCol='rgba(0,0,0,0.22)';
     var fcFront=ip(x+w/2,y+d,z+h/2);
-    if(faceOwned(fcFront.x,fcFront.y,blIdx)){
-      strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],edgeCol,edgeLw);
-      if(bl.detail!==0&&bl.seg>1){
-        ctx.strokeStyle=isSel?'rgba(60,140,255,0.6)':'rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
-        var n=bl.seg;
-        for(var s=1;s<n;s++){
-          if(bl.detail===1){
-            var fz=z+h*s/n;
-            ctx.beginPath();var l=p2(x,y+d,fz),rr=p2(x+w,y+d,fz);ctx.moveTo(l.x,l.y);ctx.lineTo(rr.x,rr.y);ctx.stroke();
-          } else {
-            var fx=x+w*s/n;
-            ctx.beginPath();var a2=p2(fx,y+d,z),b3=p2(fx,y+d,z+h);ctx.moveTo(a2.x,a2.y);ctx.lineTo(b3.x,b3.y);ctx.stroke();
-          }
-        }
-      }
-    }
-
-    // Right face (x+w) — centre at (x+w, y+d/2, z+h/2)
     var fcRight=ip(x+w,y+d/2,z+h/2);
-    if(faceOwned(fcRight.x,fcRight.y,blIdx)){
-      strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],edgeCol,edgeLw);
-      if(bl.detail!==0&&bl.seg>1){
-        ctx.strokeStyle=isSel?'rgba(60,140,255,0.6)':'rgba(0,0,0,0.22)';ctx.lineWidth=0.6*dpr;
-        var n2=bl.seg;
-        for(var s2=1;s2<n2;s2++){
+    var fcTop=ip(x+w/2,y+d/2,z+h);
+    var ownF=faceOwned(fcFront.x,fcFront.y,blIdx);
+    var ownR=faceOwned(fcRight.x,fcRight.y,blIdx);
+    var ownT=faceOwned(fcTop.x,fcTop.y,blIdx);
+
+    // Face edge outlines
+    if(ownF) strokePath([p2(x,y+d,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
+    if(ownR) strokePath([p2(x+w,y,z),p2(x+w,y+d,z),p2(x+w,y+d,z+h),p2(x+w,y,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
+    if(ownT) strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],'rgba(0,0,0,0.13)',0.5*dpr);
+
+    if(bl.detail!==0&&bl.seg>1){
+      ctx.strokeStyle=detCol; ctx.lineWidth=0.6*dpr;
+      if(bl.detail===1||bl.detail===2){
+        var n=bl.seg;
+        for(var si=1;si<n;si++){
+          if(si<=ofs||si>=n-ofs) continue;
           if(bl.detail===1){
-            var fz2=z+h*s2/n2;
-            ctx.beginPath();var l2=p2(x+w,y,fz2),rr2=p2(x+w,y+d,fz2);ctx.moveTo(l2.x,l2.y);ctx.lineTo(rr2.x,rr2.y);ctx.stroke();
+            // dv1 — loops parallel to face, appear on adjacent visible faces
+            if(face===0){
+              var yl=y+d-d*si/n;
+              if(ownR){ctx.beginPath();var p3a=p2(x+w,yl,z),p3b=p2(x+w,yl,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+              if(ownT){ctx.beginPath();var p3c=p2(x,yl,z+h),p3d=p2(x+w,yl,z+h);ctx.moveTo(p3c.x,p3c.y);ctx.lineTo(p3d.x,p3d.y);ctx.stroke();}
+            } else if(face===2){
+              var xl=x+w-w*si/n;
+              if(ownF){ctx.beginPath();var p3a=p2(xl,y+d,z),p3b=p2(xl,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+              if(ownT){ctx.beginPath();var p3c=p2(xl,y,z+h),p3d=p2(xl,y+d,z+h);ctx.moveTo(p3c.x,p3c.y);ctx.lineTo(p3d.x,p3d.y);ctx.stroke();}
+            } else if(face===4){
+              var zl=z+h-h*si/n;
+              if(ownF){ctx.beginPath();var p3a=p2(x,y+d,zl),p3b=p2(x+w,y+d,zl);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+              if(ownR){ctx.beginPath();var p3c=p2(x+w,y,zl),p3d=p2(x+w,y+d,zl);ctx.moveTo(p3c.x,p3c.y);ctx.lineTo(p3d.x,p3d.y);ctx.stroke();}
+            }
           } else {
-            var fy=y+d*s2/n2;
-            ctx.beginPath();var a3=p2(x+w,fy,z),b4=p2(x+w,fy,z+h);ctx.moveTo(a3.x,a3.y);ctx.lineTo(b4.x,b4.y);ctx.stroke();
+            // dv2 — vertical lines ON the selected face only
+            if(face===0&&ownF){var xl2=x+w*si/n;ctx.beginPath();var p3a=p2(xl2,y+d,z),p3b=p2(xl2,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+            else if(face===2&&ownR){var yl2=y+d*si/n;ctx.beginPath();var p3a=p2(x+w,yl2,z),p3b=p2(x+w,yl2,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+            else if(face===4&&ownT){var xl3=x+w*si/n;ctx.beginPath();var p3a=p2(xl3,y,z+h),p3b=p2(xl3,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
           }
+        }
+      } else if(bl.detail===3){
+        // Grid — H and V loops are independent; drawn exactly once each
+        var nh=bl.seg, nv=bl.segV||bl.seg;
+        for(var shi=1;shi<nh;shi++){
+          if(shi<=ofs||shi>=nh-ofs) continue;
+          if(face===0&&ownF){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x,y+d,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          else if(face===2&&ownR){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x+w,y,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          else if(face===4&&ownT){var yg=y+d*shi/nh;ctx.beginPath();var pa=p2(x,yg,z+h),pb=p2(x+w,yg,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+        }
+        for(var svi=1;svi<nv;svi++){
+          if(svi<=ofs||svi>=nv-ofs) continue;
+          if(face===0&&ownF){var xg=x+w*svi/nv;ctx.beginPath();var pa=p2(xg,y+d,z),pb=p2(xg,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          else if(face===2&&ownR){var yg2=y+d*svi/nv;ctx.beginPath();var pa=p2(x+w,yg2,z),pb=p2(x+w,yg2,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          else if(face===4&&ownT){var xg2=x+w*svi/nv;ctx.beginPath();var pa=p2(xg2,y,z+h),pb=p2(xg2,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
         }
       }
     }
+  });
 
-    // Top face (z+h) — centre at (x+w/2, y+d/2, z+h)
-    var fcTop=ip(x+w/2,y+d/2,z+h);
-    if(faceOwned(fcTop.x,fcTop.y,blIdx)){
-      strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y+d,z+h),p2(x,y+d,z+h)],edgeCol,edgeLw);
-    }
+  // ── Selection silhouette (hexagonal outline, no interior lines) ──
+  norm.forEach(function(bl,blIdx){
+    if(bl._origIdx!==selBlockIdx) return;
+    var x=bl.x,y=bl.y,z=bl.z,w=bl.w,d=bl.d,h=bl.h;
+    ctx.strokeStyle='rgba(0,0,255,0.9)';ctx.lineWidth=1.5*dpr;
+    strokePath([p2(x,y,z+h),p2(x+w,y,z+h),p2(x+w,y,z),p2(x+w,y+d,z),p2(x,y+d,z),p2(x,y+d,z+h)],'rgba(0,0,255,0.9)',1.5*dpr);
   });
 }
 
@@ -1365,15 +1405,19 @@ function savePattern(){
   var name=document.getElementById('ptn-name').value.trim();
   if(!name){document.getElementById('ptn-name').focus();return;}
   var cat=document.getElementById('ptn-cat').value;
-  // Overwrite protection: warn if pattern name already exists in any loaded file
-  var exists = patterns[cat] && patterns[cat][name];
-  if(exists){
-    if(!confirm('Pattern "'+name+'" already exists in category "'+cat+'".\nOverwrite it?')) return;
-  }
+  var sel=document.getElementById('src-file-sel');
+  var filePath=sel?sel.value:'';
+  var fileName=sel&&sel.selectedIndex>=0?sel.options[sel.selectedIndex].text:'';
   var blocks=edBlocks.map(blockToArr);
-  var content={CLRS:edClrs,PTNS:{}};
-  content.PTNS[cat]={};content.PTNS[cat][name]=blocks;
-  su('saveMgz', JSON.stringify({name:name,content:content}));
+  if(!filePath){
+    // No file loaded — create new .mgz in Patterns dir
+    var content={CLRS:edClrs,PTNS:{}};
+    content.PTNS[cat]={};content.PTNS[cat][name]=blocks;
+    su('saveMgz',JSON.stringify({name:name,content:content}));
+    return;
+  }
+  if(!confirm('Save pattern "'+name+'" to '+fileName+'?\nAny existing pattern with the same name will be overwritten.')) return;
+  su('saveToFile',JSON.stringify({name:name,cat:cat,blocks:blocks,filePath:filePath}));
 }
 
 function exportMgz(){

@@ -22,7 +22,7 @@ module MagArkido
     DEFAULT_BLOCK = [[0, 0, 0, 9, 9, 9, "BDY", 0, 0, 0, 0]].freeze
 
     # Keys for named-hash pattern format
-    NAMED_KEYS = %w[x y z w d h mat detail face seg offset].freeze
+    NAMED_KEYS = %w[x y z w d h mat detail face seg offset segV].freeze
 
     # Merge a raw PTNS hash (from JSON) into dest, handling both formats:
     #   Flat:   { "PatternName" => [blocks] }
@@ -112,6 +112,20 @@ module MagArkido
     # Geometry helpers
     # ---------------------------------------------------------------------------
 
+    # face index → expected outward normal direction (matches canvas mapping)
+    # 0=Y+(front) 1=Y-(back) 2=X+(right) 3=X-(left) 4=Z+(top) 5=Z-(bottom)
+    FACE_NORMALS = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]].freeze
+
+    def self.face_by_idx(g, f)
+      faces = g.entities.select { |e| e.is_a?(Sketchup::Face) }
+      return nil if faces.empty?
+      tgt = FACE_NORMALS[f] || FACE_NORMALS[0]
+      faces.min_by { |face|
+        nm = face.normal
+        (nm.x - tgt[0])**2 + (nm.y - tgt[1])**2 + (nm.z - tgt[2])**2
+      }
+    end
+
     def self.cube(e, p, w, d, h)
       p1 = p + [w, 0, 0]
       p2 = p + [0, d, 0]
@@ -124,14 +138,13 @@ module MagArkido
     end
 
     def self.dv1(g, f, n, s = 0)
-      fs = []
-      g.entities.each { |e| fs << e if e.is_a?(Sketchup::Face) }
-      return if fs.empty? || fs[f].nil?
-      vs = fs[f].vertices
+      face = face_by_idx(g, f)
+      return if face.nil?
+      vs = face.vertices
       ps = vs.map(&:position)
-      eg = vs[0].edges - fs[f].edges
+      eg = vs[0].edges - face.edges
       return if eg.empty?
-      vt = fs[f].normal.reverse
+      vt = face.normal.reverse
       vt.length = eg[0].length / n
       (1...n - s).each do |i|
         ps.map! { |p| p += vt }
@@ -140,19 +153,71 @@ module MagArkido
     end
 
     def self.dv2(g, f, n, s = 0)
-      fs, ps = [], []
-      g.entities.each { |e| fs << e if e.is_a?(Sketchup::Face) }
-      return if fs.empty? || fs[f].nil?
-      fs[f].edges.each do |e|
-        p, vt = e.start.position, e.line[1]
-        vt.length = e.length / n
-        (1...n - s).each { |i| p += vt; ps << p if i > s }
+      face = face_by_idx(g, f)
+      return if face.nil?
+      ps = face.vertices.map(&:position)
+      nm = face.normal
+      ax = nm.x.abs; ay = nm.y.abs; az = nm.z.abs
+      if ax >= ay && ax >= az
+        # X-facing face: step in Y, lines run in Z
+        y0, y1 = ps.map(&:y).minmax; z0, z1 = ps.map(&:z).minmax
+        fx = ps[0].x
+        (1...n - s).each do |i|
+          next if i <= s
+          sv = y0 + (y1 - y0) * i.to_f / n
+          g.entities.add_edges(Geom::Point3d.new(fx, sv, z0), Geom::Point3d.new(fx, sv, z1))
+        end
+      elsif ay >= ax && ay >= az
+        # Y-facing face: step in X, lines run in Z
+        x0, x1 = ps.map(&:x).minmax; z0, z1 = ps.map(&:z).minmax
+        fy = ps[0].y
+        (1...n - s).each do |i|
+          next if i <= s
+          sv = x0 + (x1 - x0) * i.to_f / n
+          g.entities.add_edges(Geom::Point3d.new(sv, fy, z0), Geom::Point3d.new(sv, fy, z1))
+        end
+      else
+        # Z-facing face: step in X, lines run in Y
+        x0, x1 = ps.map(&:x).minmax; y0, y1 = ps.map(&:y).minmax
+        fz = ps[0].z
+        (1...n - s).each do |i|
+          next if i <= s
+          sv = x0 + (x1 - x0) * i.to_f / n
+          g.entities.add_edges(Geom::Point3d.new(sv, y0, fz), Geom::Point3d.new(sv, y1, fz))
+        end
       end
-      perp = fs[f].vertices[0].edges - fs[f].edges
-      return if perp.empty?
-      vt = fs[f].normal.reverse
-      vt.length = perp[0].length
-      ps.map { |p| [p, p + vt] }.each { |l| g.entities.add_edges l }
+    end
+
+    def self.dv_grid(g, f, nh, nv, s = 0)
+      face = face_by_idx(g, f)
+      return if face.nil?
+      nm = face.normal
+      ax = nm.x.abs; ay = nm.y.abs; az = nm.z.abs
+      lrp = lambda { |a, b, t| Geom::Point3d.new(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, a.z+(b.z-a.z)*t) }
+
+      if ay >= ax && ay >= az
+        cs = face.vertices.map(&:position).sort_by { |p| [p.z.to_f, p.x.to_f] }
+      elsif ax >= ay && ax >= az
+        cs = face.vertices.map(&:position).sort_by { |p| [p.z.to_f, p.y.to_f] }
+      else
+        cs = face.vertices.map(&:position).sort_by { |p| [p.y.to_f, p.x.to_f] }
+      end
+      bl, br, tl, tr = cs[0], cs[1], cs[2], cs[3]
+
+      # Precompute all grid intersection points: pts[row][col]
+      pts = (0..nh).map { |i|
+        t_i = i.to_f / nh
+        rl = lrp.call(bl, tl, t_i); rr = lrp.call(br, tr, t_i)
+        (0..nv).map { |j| lrp.call(rl, rr, j.to_f / nv) }
+      }
+
+      # Add full-width H lines first — each spans one intact face, so SketchUp splits cleanly
+      (s+1...nh-s).each { |i| g.entities.add_edges(pts[i][0], pts[i][nv]) }
+
+      # Add V lines as per-row segments — each segment now spans exactly one face (one row)
+      (s+1...nv-s).each do |j|
+        (0...nh).each { |i| g.entities.add_edges(pts[i][j], pts[i+1][j]) }
+      end
     end
 
     def self.lv(t, m)
@@ -217,6 +282,7 @@ module MagArkido
         unless @no_detail || (detail == 0 && n[7] == 0)
           dv1(c, n[8], n[9], n[10]) if n[7] == 1
           dv2(c, n[8], n[9], n[10]) if n[7] == 2
+          dv_grid(c, n[8], n[9], (n[11] || n[9]).to_i, n[10]) if n[7] == 3
         end
       end
 
@@ -489,6 +555,35 @@ module MagArkido
         merge_ptns(@ptn, ptns)
         puts "MagArkido: saved #{name} to #{path}"
         @mgr.execute_script("refreshAll(#{JSON.generate(@ptn)}, #{JSON.generate(files_js)}, #{JSON.generate(@clrs)})")
+      end
+
+      # Overwrite pattern inside an existing loaded .mgz file
+      @mgr.add_action_callback('saveToFile') do |_ctx, data|
+        parsed     = JSON.parse(data)
+        name       = parsed['name']
+        cat        = parsed['cat']
+        blocks     = parsed['blocks']
+        file_path  = parsed['filePath']
+        begin
+          existing = JSON.parse(File.read(file_path))
+        rescue
+          existing = { 'CLRS' => {}, 'PTNS' => {} }
+        end
+        file_ptns = {}
+        merge_ptns(file_ptns, existing['PTNS'] || {})
+        file_ptns[cat] ||= {}
+        file_ptns[cat][name] = blocks
+        existing['PTNS'] = file_ptns
+        File.write(file_path, JSON.pretty_generate(existing))
+        fe = @files.find { |f| f[:path] == file_path }
+        if fe
+          fe[:ptns][cat] ||= {}
+          fe[:ptns][cat][name] = blocks
+        end
+        @ptn[cat] ||= {}
+        @ptn[cat][name] = blocks
+        puts "MagArkido: saved #{name} (#{cat}) to #{file_path}"
+        @mgr.execute_script("refreshAll(#{JSON.generate(@ptn)}, #{JSON.generate(files_js)}, #{JSON.generate(@clrs)}, true)")
       end
 
       # Remove a single pattern from the in-memory @ptn (does not touch .mgz files)
