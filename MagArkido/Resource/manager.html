@@ -91,11 +91,15 @@
       <div id="canvas-resize-handle" id="cvs-drag"></div>
       <canvas id="iso-canvas"></canvas>
       <div id="canvas-ctrl">
-        <div id="canvas-ctrl-row">
-          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate left">↺</button>
-          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate right">↻</button>
-          <button class="rand-btn" onclick="randomize()">&#127922; Rnd</button>
+        <div class="canvas-ctrl-row">
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+3)%4;drawISO()" title="Rotate view left">↺</button>
+          <button class="rand-btn rot-btn" onclick="canvasRot=(canvasRot+1)%4;drawISO()" title="Rotate view right">↻</button>
+          <button class="rand-btn" onclick="randomize()" title="Re-roll random values">&#127922; Rnd</button>
           <button class="rand-btn rot-btn" onclick="drawISO()" title="Redraw canvas">&#10226;</button>
+        </div>
+        <div class="canvas-ctrl-row">
+          <button class="rand-btn" onclick="su('placeBox')" title="Place a new box group in the SketchUp model">&#43; Place</button>
+          <button class="rand-btn reset-sel-btn" onclick="su('resetSelection')" title="Reset selected SketchUp objects to plain cube">&#9723; Reset</button>
           <button class="rand-btn test-btn" id="test-btn" onclick="testPattern()">&#9654; Test</button>
         </div>
       </div>
@@ -143,16 +147,18 @@
       <tr><td>lv(t, 3.5)</td><td>Floor count = target height ÷ 3.5 m per floor</td></tr>
       <tr><td>w, d, h, x, y, z…</td><td>Resolved value of another field in this block</td></tr>
     </table>
-    <p class="htxt">Examples:</p>
-    <table class="htbl">
-      <tr><td>"lv(t,3.5)*3"</td><td><abbr title="lv(t,3.5) = floor count (target height ÷ 3.5 m per floor) · * = multiply · 3 = three times the floor count">floor count × 3 — scales with building height</abbr></td></tr>
-      <tr><td>"r1*10+20"</td><td><abbr title="r1 = random bit, 0 or 1 per building · *10 = multiply by 10 · +20 = add base offset → result is 20 or 30">randomly 20 or 30 per building</abbr></td></tr>
-      <tr><td>"70+r4*4"</td><td><abbr title="70 = base value · r4 = independent random bit · *4 = multiply · → result is 70 or 74">randomly 70 or 74, independent of r1–r3</abbr></td></tr>
-      <tr><td>"rand(4)*5"</td><td><abbr title="rand(4) = random integer 0, 1, 2, or 3 · *5 = multiply → result is 0, 5, 10, or 15">one of four evenly-spaced values</abbr></td></tr>
-      <tr><td>"lv(t,3)+r2*2"</td><td><abbr title="lv(t,3) = floor count (3 m floors) · r2 = random bit · *2 = adds 0 or 2 → floor count with random ±2 variation">floor count with random 2-unit variation</abbr></td></tr>
-      <tr><td>"w*0.5"</td><td><abbr title="w = resolved width of this block · *0.5 = half of it → makes this field exactly half the block width">half of this block's own width</abbr></td></tr>
+    <p class="htxt">Examples — <span class="htxt-hint">click any formula to insert it into the focused expression field</span>:</p>
+    <table class="htbl htbl-clickable">
+      <tr onclick="insertExample('lv(t,3.5)*3')"><td class="hex-formula">lv(t,3.5)*3</td><td>floor count × 3 — scales with building height</td></tr>
+      <tr onclick="insertExample('lv(t,3.5)')"><td class="hex-formula">lv(t,3.5)</td><td>floor count at 3.5 m per floor</td></tr>
+      <tr onclick="insertExample('r1*10+20')"><td class="hex-formula">r1*10+20</td><td>randomly 20 or 30 per building</td></tr>
+      <tr onclick="insertExample('70+r4*4')"><td class="hex-formula">70+r4*4</td><td>randomly 70 or 74, independent of r1–r3</td></tr>
+      <tr onclick="insertExample('rand(4)*5')"><td class="hex-formula">rand(4)*5</td><td>one of four evenly-spaced values (0, 5, 10, 15)</td></tr>
+      <tr onclick="insertExample('lv(t,3)+r2*2')"><td class="hex-formula">lv(t,3)+r2*2</td><td>floor count with random 2-unit variation</td></tr>
+      <tr onclick="insertExample('w*0.5')"><td class="hex-formula">w*0.5</td><td>half of this block's own width</td></tr>
+      <tr onclick="insertExample('h*r1')"><td class="hex-formula">h*r1</td><td>randomly 0 or full block height</td></tr>
     </table>
-    <p class="htxt">Use <b>fx</b> on any field to switch it to expression mode.</p>
+    <p class="htxt">Use <b>fx</b> on any field to switch it to expression mode, then click an example above.</p>
 
     <div class="hsec">Canvas Controls</div>
     <p class="htxt"><b>◀ ▶</b> Rotate view &nbsp;·&nbsp; <b>Rnd</b> Re-roll random values &nbsp;·&nbsp; <b>&#10226;</b> Redraw canvas &nbsp;·&nbsp; <b>▶ Test</b> Apply to selected SketchUp objects as a preview</p>
@@ -191,7 +197,7 @@ function initPatterns() {
   patterns = window.magarkidoPatterns || {};
   loadedFiles = window.magarkidoFiles || [];
   edClrs = normalizeClrs(window.magarkidoClrs || {});
-  if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+  if (!Object.keys(edClrs).length) edClrs = {TOP:'#cccccc',BDY:'#ffffff',BTM:'#aaaaaa',SLD:'#666666',WOD:'#997a67',GLS:'#a7cedf'};
 
   // Restore previous selection from Ruby @nm = [[cat,key],...]
   var nm = window.magarkidoNm;
@@ -246,7 +252,7 @@ function refreshAll(newPtns, newFiles, newClrs, keepEditor) {
   patterns = newPtns;
   loadedFiles = newFiles;
   edClrs = normalizeClrs(newClrs || {});
-  if (!Object.keys(edClrs).length) edClrs = {BDY:'#5b85a8', SLD:'#4e5e6e'};
+  if (!Object.keys(edClrs).length) edClrs = {TOP:'#cccccc',BDY:'#ffffff',BTM:'#aaaaaa',SLD:'#666666',WOD:'#997a67',GLS:'#a7cedf'};
   // Reset to all-patterns view when files change; keep category if still valid
   if (selCatName !== null && selCatName !== 'auto' && !patterns[selCatName]) selCatName = null;
   if (!loadedFiles.length) selCatName = null;
@@ -331,7 +337,7 @@ function setShellState(hasFiles) {
   var wasNoFiles = shell.classList.contains('no-files');
   shell.classList.toggle('no-files', !hasFiles);
   if (wasNoFiles !== !hasFiles) {
-    su('resizeDialog', JSON.stringify(hasFiles ? {w:680,h:580} : {w:440,h:165}));
+    su('resizeDialog', JSON.stringify(hasFiles ? {w:755,h:600} : {w:440,h:165}));
   }
 }
 
@@ -688,6 +694,24 @@ function applyPtn() {
 // ── Editor state ──────────────────────────────────────
 var edBlocks = [], selBlockIdx = -1, edHistory = [];
 var r1=1, r2=0, r3=1, r4=0, r5=1, r6=0;
+var lastExprKey = null;
+function insertExample(formula) {
+  if (!lastExprKey) return;
+  if (selBlockIdx < 0 || selBlockIdx >= edBlocks.length) return;
+  // Ensure the target field is in expression mode
+  var b = edBlocks[selBlockIdx];
+  if (!b._expr) b._expr = {};
+  b._expr[lastExprKey] = true;
+  b[lastExprKey] = formula;
+  document.getElementById('helpov').classList.add('hidden');
+  renderInspector();
+  drawISO();
+  // Re-focus the input after re-render
+  setTimeout(function(){
+    var inp = document.querySelector('.fexpr-inp[onfocus*="lastExprKey=\''+lastExprKey+'\'"]');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 30);
+}
 var edSourceFile = ''; // name of the .mgz file the current pattern came from
 
 function pushHistory() {
@@ -728,7 +752,7 @@ function blockToArr(b) { return KEYS.map(function(k){return b[k];}); }
 
 function makeDefault() {
   var firstMat = Object.keys(edClrs)[0] || 'BDY';
-  return {x:0,y:0,z:0,w:40,d:40,h:20,mat:firstMat,detail:0,face:0,seg:6,offset:0,segV:6,_expr:{},_id:_blockIdCounter++};
+  return {x:0,y:0,z:0,w:10,d:10,h:10,mat:firstMat,detail:0,face:0,seg:6,offset:0,segV:6,_expr:{},_id:_blockIdCounter++};
 }
 
 // Find which loaded file a pattern belongs to
@@ -805,6 +829,7 @@ function newPattern() {
   refreshPtnSel();
   updateSrcFile();
   document.getElementById('edov').classList.remove('hidden');
+  su('resizeDialog', JSON.stringify({w:755,h:600}));
   updateUndoBtn();
   renderBlockList(); renderInspector(); drawISODeferred();
 }
@@ -995,9 +1020,9 @@ function renderInspector() {
   P1KEYS.forEach(function(k){ p1[k]=evalExpr(b[k],r1,r2,r3,PREVIEW_H,null); });
   el.innerHTML=''
     +'<div class="fg"><div class="fg-head">Position <span class="fg-hint">offset from pattern origin</span></div>'
-    +eRow('x',b.x,ex.x,0,80,p1,'Left/right (red axis)')+eRow('y',b.y,ex.y,0,80,p1,'Front/back (green axis)')+eRow('z',b.z,ex.z,0,90,p1,'Up from ground (blue axis)')+'</div>'
+    +eRow('x',b.x,ex.x,0,100,p1,'Left/right (red axis)')+eRow('y',b.y,ex.y,0,100,p1,'Front/back (green axis)')+eRow('z',b.z,ex.z,0,100,p1,'Up from ground (blue axis)')+'</div>'
     +'<div class="fg"><div class="fg-head">Size <span class="fg-hint">proportions matter, not absolute scale</span></div>'
-    +eRow('w',b.w,ex.w,1,80,p1,'Width (X extent)')+eRow('d',b.d,ex.d,1,80,p1,'Depth (Y extent)')+eRow('h',b.h,ex.h,1,90,p1,'Height (Z extent)')+'</div>'
+    +eRow('w',b.w,ex.w,1,100,p1,'Width (X extent)')+eRow('d',b.d,ex.d,1,100,p1,'Depth (Y extent)')+eRow('h',b.h,ex.h,1,100,p1,'Height (Z extent)')+'</div>'
     +'<div class="fg"><div class="fg-head">Material <span class="fg-hint">click swatch to assign · click colour to change</span></div>'
     +'<div class="frow mat-frow"><div class="mat-row" id="mat-row"></div>'
     +'<button class="mat-add-btn" onclick="addMatKey()" title="Add new material key">+</button></div></div>'
@@ -1016,12 +1041,13 @@ function renderInspector() {
           var fbadge='<span class="expr-badge '+(fok?'ok':'err')+'" id="eb-face">'+(fok?'= '+Math.round(fr):'⚠ err')+'</span>';
           if(fex){
             return '<div class="frow"><span class="flbl" title="Which face (0=front, 1=back, 2=left, 3=right, 4=bottom, 5=top)">face</span>'
-              +'<div class="fexpr-wrap"><input type="text" class="fexpr-inp expr-mode" value="'+String(fv)+'" oninput="setFieldExpr(\'face\',this.value)">'+fbadge
+              +'<div class="fexpr-wrap"><input type="text" class="fexpr-inp expr-mode" value="'+String(fv)+'" oninput="setFieldExpr(\'face\',this.value)" onfocus="lastExprKey=\'face\'">'+fbadge
               +'<button class="fxtog on" onclick="toggleExpr(\'face\')" title="Switch to picker">#</button></div></div>';
           }
           return '<div class="frow"><span class="flbl" title="Which face (0=front, 1=back, 2=left, 3=right, 4=bottom, 5=top)">face</span>'
             +'<div class="fexpr-wrap"><div class="face-row">'
             +[0,1,2,3,4,5].map(function(f){return '<button class="fachip'+(b.face===f?' active':'')+'" onclick="setFace('+f+')" title="Face '+f+'">'+f+'</button>';}).join('')
+            +'<button class="fachip fachip-all'+(b.face===6?' active':'')+'" onclick="setFace(6)" title="All vertical faces (0–3)">all</button>'
             +'</div>'+fbadge+'<button class="fxtog" onclick="toggleExpr(\'face\')" title="Switch to expression mode">fx</button></div></div>';
         })()
         +(b.detail===3
@@ -1059,10 +1085,12 @@ function eRow(key,val,isExpr,mn,mx,p1fields,hint) {
   var titleAttr=hint?' title="'+hint+'"':'';
   return '<div class="frow"><span class="flbl"'+titleAttr+'>'+key+'</span><div class="fexpr-wrap">'
     +(isExpr
-      ?'<input type="text" class="fexpr-inp expr-mode" value="'+strVal+'" oninput="setFieldExpr(\''+key+'\',this.value)">'+badge
+      ?'<input type="text" class="fexpr-inp expr-mode" value="'+strVal+'" oninput="setFieldExpr(\''+key+'\',this.value)" onfocus="lastExprKey=\''+key+'\'">'+badge
       :'<input type="range" class="fslider" min="'+mn+'" max="'+mx+'" step="1" value="'+clamped+'"'
-       +' oninput="setField(\''+key+'\',parseFloat(this.value));document.getElementById(\'fv-'+key+'\').textContent=this.value">'
-       +'<span class="fval" id="fv-'+key+'">'+num+'</span>'+badge)
+       +' oninput="setField(\''+key+'\',parseFloat(this.value));document.getElementById(\'fv-'+key+'\').value=this.value">'
+       +'<input type="number" class="fval-inp" id="fv-'+key+'" value="'+num+'" min="'+mn+'" max="'+mx+'"'
+       +' onchange="var v=parseFloat(this.value)||'+mn+';v=Math.min('+mx+',Math.max('+mn+',v));this.value=v;setField(\''+key+'\',v);var sl=this.previousElementSibling;if(sl&&sl.type===\'range\'){sl.value=v;}">'
+       +badge)
     +'<button class="fxtog'+(isExpr?' on':'')+'" onclick="toggleExpr(\''+key+'\')" title="Toggle expression mode">'+(isExpr?'#':'fx')+'</button>'
     +'</div></div>';
 }
@@ -1348,16 +1376,18 @@ function drawISO(){
               var xl=x+w-w*si/n;
               if(ownF){ctx.beginPath();var p3a=p2(xl,y+d,z),p3b=p2(xl,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
               if(ownT){ctx.beginPath();var p3c=p2(xl,y,z+h),p3d=p2(xl,y+d,z+h);ctx.moveTo(p3c.x,p3c.y);ctx.lineTo(p3d.x,p3d.y);ctx.stroke();}
-            } else if(face===4){
+            } else if(face===4||face===6){
+              // face=4: top loops step down, visible on front+right
+              // face=6 all-vertical: same — horizontal bands around all vertical faces
               var zl=z+h-h*si/n;
               if(ownF){ctx.beginPath();var p3a=p2(x,y+d,zl),p3b=p2(x+w,y+d,zl);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
               if(ownR){ctx.beginPath();var p3c=p2(x+w,y,zl),p3d=p2(x+w,y+d,zl);ctx.moveTo(p3c.x,p3c.y);ctx.lineTo(p3d.x,p3d.y);ctx.stroke();}
             }
           } else {
             // dv2 — vertical lines ON the selected face only
-            if(face===0&&ownF){var xl2=x+w*si/n;ctx.beginPath();var p3a=p2(xl2,y+d,z),p3b=p2(xl2,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
-            else if(face===2&&ownR){var yl2=y+d*si/n;ctx.beginPath();var p3a=p2(x+w,yl2,z),p3b=p2(x+w,yl2,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
-            else if(face===4&&ownT){var xl3=x+w*si/n;ctx.beginPath();var p3a=p2(xl3,y,z+h),p3b=p2(xl3,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+            if((face===0||face===6)&&ownF){var xl2=x+w*si/n;ctx.beginPath();var p3a=p2(xl2,y+d,z),p3b=p2(xl2,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+            if((face===2||face===6)&&ownR){var yl2=y+d*si/n;ctx.beginPath();var p3a=p2(x+w,yl2,z),p3b=p2(x+w,yl2,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
+            if(face===4&&ownT){var xl3=x+w*si/n;ctx.beginPath();var p3a=p2(xl3,y,z+h),p3b=p2(xl3,y+d,z+h);ctx.moveTo(p3a.x,p3a.y);ctx.lineTo(p3b.x,p3b.y);ctx.stroke();}
           }
         }
       } else if(bl.detail===3){
@@ -1365,15 +1395,15 @@ function drawISO(){
         var nh=bl.seg, nv=bl.segV||bl.seg;
         for(var shi=1;shi<nh;shi++){
           if(shi<=ofs||shi>=nh-ofs) continue;
-          if(face===0&&ownF){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x,y+d,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
-          else if(face===2&&ownR){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x+w,y,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
-          else if(face===4&&ownT){var yg=y+d*shi/nh;ctx.beginPath();var pa=p2(x,yg,z+h),pb=p2(x+w,yg,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if((face===0||face===6)&&ownF){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x,y+d,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if((face===2||face===6)&&ownR){var zg=z+h*shi/nh;ctx.beginPath();var pa=p2(x+w,y,zg),pb=p2(x+w,y+d,zg);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if(face===4&&ownT){var yg=y+d*shi/nh;ctx.beginPath();var pa=p2(x,yg,z+h),pb=p2(x+w,yg,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
         }
         for(var svi=1;svi<nv;svi++){
           if(svi<=ofs||svi>=nv-ofs) continue;
-          if(face===0&&ownF){var xg=x+w*svi/nv;ctx.beginPath();var pa=p2(xg,y+d,z),pb=p2(xg,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
-          else if(face===2&&ownR){var yg2=y+d*svi/nv;ctx.beginPath();var pa=p2(x+w,yg2,z),pb=p2(x+w,yg2,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
-          else if(face===4&&ownT){var xg2=x+w*svi/nv;ctx.beginPath();var pa=p2(xg2,y,z+h),pb=p2(xg2,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if((face===0||face===6)&&ownF){var xg=x+w*svi/nv;ctx.beginPath();var pa=p2(xg,y+d,z),pb=p2(xg,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if((face===2||face===6)&&ownR){var yg2=y+d*svi/nv;ctx.beginPath();var pa=p2(x+w,yg2,z),pb=p2(x+w,yg2,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+          if(face===4&&ownT){var xg2=x+w*svi/nv;ctx.beginPath();var pa=p2(xg2,y,z+h),pb=p2(xg2,y+d,z+h);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
         }
       }
     }

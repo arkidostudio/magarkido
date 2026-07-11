@@ -195,14 +195,22 @@ module MagArkido
       ax = nm.x.abs; ay = nm.y.abs; az = nm.z.abs
       lrp = lambda { |a, b, t| Geom::Point3d.new(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, a.z+(b.z-a.z)*t) }
 
+      # Use min/max bounds to find true corners — face may have extra midpoint vertices
+      # on shared edges from a prior dv_grid call on an adjacent face
+      ps = face.vertices.map(&:position)
       if ay >= ax && ay >= az
-        cs = face.vertices.map(&:position).sort_by { |p| [p.z.to_f, p.x.to_f] }
+        x0, x1 = ps.map(&:x).minmax; z0, z1 = ps.map(&:z).minmax; fy = ps[0].y
+        bl = Geom::Point3d.new(x0,fy,z0); br = Geom::Point3d.new(x1,fy,z0)
+        tl = Geom::Point3d.new(x0,fy,z1); tr = Geom::Point3d.new(x1,fy,z1)
       elsif ax >= ay && ax >= az
-        cs = face.vertices.map(&:position).sort_by { |p| [p.z.to_f, p.y.to_f] }
+        y0, y1 = ps.map(&:y).minmax; z0, z1 = ps.map(&:z).minmax; fx = ps[0].x
+        bl = Geom::Point3d.new(fx,y0,z0); br = Geom::Point3d.new(fx,y1,z0)
+        tl = Geom::Point3d.new(fx,y0,z1); tr = Geom::Point3d.new(fx,y1,z1)
       else
-        cs = face.vertices.map(&:position).sort_by { |p| [p.y.to_f, p.x.to_f] }
+        x0, x1 = ps.map(&:x).minmax; y0, y1 = ps.map(&:y).minmax; fz = ps[0].z
+        bl = Geom::Point3d.new(x0,y0,fz); br = Geom::Point3d.new(x1,y0,fz)
+        tl = Geom::Point3d.new(x0,y1,fz); tr = Geom::Point3d.new(x1,y1,fz)
       end
-      bl, br, tl, tr = cs[0], cs[1], cs[2], cs[3]
 
       # Precompute all grid intersection points: pts[row][col]
       pts = (0..nh).map { |i|
@@ -280,9 +288,21 @@ module MagArkido
         c.name = "Block #{i + 1}"
         c.material = n[6]
         unless @no_detail || (detail == 0 && n[7] == 0)
-          dv1(c, n[8], n[9], n[10]) if n[7] == 1
-          dv2(c, n[8], n[9], n[10]) if n[7] == 2
-          dv_grid(c, n[8], n[9], (n[11] || n[9]).to_i, n[10]) if n[7] == 3
+          if n[8] == 6
+            if n[7] == 1
+              # Horizontal loops from top face step downward — appear on all 4 vertical faces
+              dv1(c, 4, n[9], n[10])
+            elsif n[7] == 2
+              [0, 1, 2, 3].each { |f| dv2(c, f, n[9], n[10]) }
+            elsif n[7] == 3
+              nv_all = (n[11] || n[9]).to_i
+              [0, 1, 2, 3].each { |f| dv_grid(c, f, n[9], nv_all, n[10]) }
+            end
+          else
+            dv1(c, n[8], n[9], n[10]) if n[7] == 1
+            dv2(c, n[8], n[9], n[10]) if n[7] == 2
+            dv_grid(c, n[8], n[9], (n[11] || n[9]).to_i, n[10]) if n[7] == 3
+          end
         end
       end
 
@@ -631,6 +651,27 @@ module MagArkido
         transform_all(1)
       end
 
+      @mgr.add_action_callback('resetSelection') do |_ctx|
+        transform_all(0, true)
+      end
+
+      @mgr.add_action_callback('placeBox') do |_ctx|
+        UI.start_timer(0, false) do
+          model = Sketchup.active_model
+          model.start_operation('Place Box', true)
+          grp = model.active_entities.add_group
+          s = 10.m  # 10 metres in SketchUp internal units
+          f = grp.entities.add_face(
+            Geom::Point3d.new(0,0,0), Geom::Point3d.new(s,0,0),
+            Geom::Point3d.new(s,s,0), Geom::Point3d.new(0,s,0)
+          )
+          f.pushpull(-s, true)
+          model.commit_operation
+          model.selection.clear
+          model.selection.add(grp)
+        end
+      end
+
       @mgr.add_action_callback('randomizeRotation') do |_ctx|
         rotate_all
       end
@@ -724,6 +765,18 @@ module MagArkido
       cm5.status_bar_text = 'Absorb selected group\'s sub-groups as a new pattern'
       cm5.tooltip = 'Absorb Selection as Pattern'
       tb.add_item cm5
+
+      tb.add_separator
+
+      cm6 = UI::Command.new('Reload MagArkido') {
+        reset_mgr rescue nil
+        load File.join(Sketchup.find_support_file('Plugins'), 'MagArkido/MagArkido_Core.rb')
+        puts 'MagArkido: reloaded'
+      }
+      cm6.small_icon = cm6.large_icon = res + 'icon6.svg'
+      cm6.status_bar_text = 'Reload MagArkido extension'
+      cm6.tooltip = 'Reload Extension'
+      tb.add_item cm6
 
       tb.show
     end
